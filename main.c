@@ -32,6 +32,9 @@
     default:                "other")
 
 // https://cplusplus.com/reference/cstdio/printf/
+// https://cplusplus.com/reference/cstdio/scanf/
+
+// TODO: strtod, strstr, strchr, strlen, isspace, sscanf
 #define MY_IMPLEMENTATION
 
 // TODO: Implement some kind of generics in C using preprocessor
@@ -171,14 +174,17 @@ static long int float_exponent_form(double *const value, const unsigned int base
     return exponent;
 }
 
+#define ABS(x)  (((x) >= 0) ? (x) : -(x))
+
 static int                      // Return the amount of characters that would have been written if we had enough size
 convert_float_to_str(
     char **buf,                 // Buffer in which we must write the output string
     size_t *const sz,           // Size of the buffer
     const unsigned int base,    // Integer base (10 or 16)
     const bool uppercase,       // The hexadecimal characters should be in upper case?
-    const bool exponent_form,   // Use exponent form?
-    const int decimal_places,   // Decimal places
+    bool exponent_form,         // Use exponent form?
+    const bool short_form,      // Use short form?
+    int decimal_places,         // Decimal places
     const double value          // Float value to be converted to string
 )
 {
@@ -187,15 +193,29 @@ convert_float_to_str(
     double x = negative ? (-value) : value;
     int written = 0;
     long int exponent = 0;
-    if (exponent_form) {
+    const double original_x = x;
+    if (exponent_form | short_form) {
         exponent = float_exponent_form(&x, base == 16 ? 2 : base);
+    }
+    if (short_form) {
+        exponent_form = (ABS(exponent) >= 5);
+        if (decimal_places < 0) {
+            decimal_places = exponent_form ? 5 : (int)(5L - exponent);
+        }
+        if (!exponent_form) {
+            x = original_x;
+        }
     }
     for (int exp = decimal_places; exp > 0; exp--) {
         const double y = scale_radix_exp(x, base, exp);
         const char c = (char)div_remainder(y, base, exp == decimal_places);
-        str[written++] = VALUE_TO_CHAR(c, uppercase);
+        if ((!short_form) || (c != 0) || (written != 0)) {
+            str[written++] = VALUE_TO_CHAR(c, uppercase);
+        }
     }
-    str[written++] = '.';
+    if ((!short_form) || (written > 0)) {
+        str[written++] = '.';
+    }
     char c = (char)div_remainder(x, base, false);
     do {
         str[written++] = VALUE_TO_CHAR(c, uppercase);
@@ -384,17 +404,27 @@ static int __snprintf(char **buf, size_t *const sz, const char *fmt, va_list arg
             case 'f':
             case 'F':
                 // Decimal floating point
-                written += convert_float_to_str(buf, sz, 10, false, false, 6, va_arg(args, double));
+                written += convert_float_to_str(buf, sz, 10, false, false, false, 6, va_arg(args, double));
                 cursor++;
                 break;
             case 'e':
                 // Decimal floating point
-                written += convert_float_to_str(buf, sz, 10, false, true, 6, va_arg(args, double));
+                written += convert_float_to_str(buf, sz, 10, false, true, false, 6, va_arg(args, double));
                 cursor++;
                 break;
             case 'E':
                 // Decimal floating point
-                written += convert_float_to_str(buf, sz, 10, true, true, 6, va_arg(args, double));
+                written += convert_float_to_str(buf, sz, 10, true, true, false, 6, va_arg(args, double));
+                cursor++;
+                break;
+            case 'g':
+                // Decimal floating point
+                written += convert_float_to_str(buf, sz, 10, false, true, true, -1, va_arg(args, double));
+                cursor++;
+                break;
+            case 'G':
+                // Decimal floating point
+                written += convert_float_to_str(buf, sz, 10, true, true, true, -1, va_arg(args, double));
                 cursor++;
                 break;
             case 'a':
@@ -402,7 +432,7 @@ static int __snprintf(char **buf, size_t *const sz, const char *fmt, va_list arg
                 PUTCHAR('0');
                 PUTCHAR('x');
                 written += 2;
-                written += convert_float_to_str(buf, sz, 16, false, true, 13, va_arg(args, double));
+                written += convert_float_to_str(buf, sz, 16, false, true, false, 13, va_arg(args, double));
                 cursor++;
                 break;
             case 'A':
@@ -410,7 +440,7 @@ static int __snprintf(char **buf, size_t *const sz, const char *fmt, va_list arg
                 PUTCHAR('0');
                 PUTCHAR('X');
                 written += 2;
-                written += convert_float_to_str(buf, sz, 16, true, true, 13, va_arg(args, double));
+                written += convert_float_to_str(buf, sz, 16, true, true, false, 13, va_arg(args, double));
                 cursor++;
                 break;
             case '.':
@@ -425,29 +455,37 @@ static int __snprintf(char **buf, size_t *const sz, const char *fmt, va_list arg
                     if (ret > 0) {
                         if (*(cursor + ret + 1) == 'f') {
                             // Decimal floating point
-                            written += convert_float_to_str(buf, sz, 10, false, false, (int)number, va_arg(args, double));
+                            written += convert_float_to_str(buf, sz, 10, false, false, false, (int)number, va_arg(args, double));
                             cursor += ret + 2;
                         } else if (*(cursor + ret + 1) == 'e') {
                             // Decimal floating point
-                            written += convert_float_to_str(buf, sz, 10, false, true, (int)number, va_arg(args, double));
+                            written += convert_float_to_str(buf, sz, 10, false, true, false, (int)number, va_arg(args, double));
                             cursor += ret + 2;
                         } else if (*(cursor + ret + 1) == 'E') {
                             // Decimal floating point
-                            written += convert_float_to_str(buf, sz, 10, true, true, (int)number, va_arg(args, double));
+                            written += convert_float_to_str(buf, sz, 10, true, true, false, (int)number, va_arg(args, double));
+                            cursor += ret + 2;
+                        } else if (*(cursor + ret + 1) == 'g') {
+                            // Decimal floating point
+                            written += convert_float_to_str(buf, sz, 10, false, true, true, (int)number, va_arg(args, double));
+                            cursor += ret + 2;
+                        } else if (*(cursor + ret + 1) == 'G') {
+                            // Decimal floating point
+                            written += convert_float_to_str(buf, sz, 10, true, true, true, (int)number, va_arg(args, double));
                             cursor += ret + 2;
                         } else if (*(cursor + ret + 1) == 'a') {
                             // Hexadecimal floating point
                             PUTCHAR('0');
                             PUTCHAR('x');
                             written += 2;
-                            written += convert_float_to_str(buf, sz, 16, false, true, (int)number, va_arg(args, double));
+                            written += convert_float_to_str(buf, sz, 16, false, true, false, (int)number, va_arg(args, double));
                             cursor += ret + 2;
                         } else if (*(cursor + ret + 1) == 'A') {
                             // Hexadecimal floating point
                             PUTCHAR('0');
                             PUTCHAR('X');
                             written += 2;
-                            written += convert_float_to_str(buf, sz, 16, true, true, (int)number, va_arg(args, double));
+                            written += convert_float_to_str(buf, sz, 16, true, true, false, (int)number, va_arg(args, double));
                             cursor += ret + 2;
                         } else if (*(cursor + ret + 1) == 's') {
                             // String
@@ -587,7 +625,9 @@ int main(void)
     // Hexadecimal floating point
     TEST_SNPRINTF("0x1.88915b573eab3p+8 0x1.b7cdfd9d7bdbbp-34 0x1.9ap-4 0X1.B7CDFD9D7BDBBP-34", "%a %a %.2a %A", 392.5678, 1e-10, 0.1, 1e-10);
     // Use the shortest representation:
+    // TODO: Add better tests, with negative numbers and double limits
     TEST_SNPRINTF("392.568 1e-10 0.1 1E-10", "%g %g %.2g %G", 392.5678, 1e-10, 0.1, 1e-10);
+    TEST_SNPRINTF("0.1 0.001 0.00123457 0.000123457 1.23457e-05", "%g %g %g %g %g", 0.1, 1e-3, 1.234567e-3, 1.234567e-4, 1.234567e-5);
     // String of characters
     TEST_SNPRINTF("Some null string of chars: (null)", "%s %.4s%7s %-3s%.*ss: %s", "Some", "null pointer", "string", "of", 4, "character", (char *)NULL);
     // Nothing printed. The corresponding argument must be a pointer to a signed int.
