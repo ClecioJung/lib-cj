@@ -31,7 +31,6 @@
     int *:                  "pointer to int",           \
     default:                "other")
 
-// https://cplusplus.com/reference/cstdio/printf/
 // https://cplusplus.com/reference/cstdio/scanf/
 
 // TODO: strtod, strstr, strchr, strlen, isspace, sscanf
@@ -40,7 +39,6 @@
 // TODO: Implement some kind of generics in C using preprocessor
 // TODO: Try to make it fast and optimized
 // TODO: We should use macro like CASE() to simplify parsing of codes in __snprintf
-// TODO: Check what the standard proposes in case of invalid code, exemple %b or %j
 
 #ifdef MY_IMPLEMENTATION
 
@@ -48,11 +46,11 @@
 static int str_to_int(
     const char *fmt,
     const unsigned int base,
-    long int *const number
+    long int *const value
 )
 {
     int index = 0;
-    *number = 0;
+    long int number = 0;
     for (; fmt[index] != '\0'; index++) {
         const char c = fmt[index];
         int digit = 0;
@@ -63,14 +61,17 @@ static int str_to_int(
         } else {
             break;
         }
-        if (*number <= LONG_MAX / base) {
-            *number = base * (*number) + digit;
+        if (number <= LONG_MAX / base) {
+            number = base * (number) + digit;
         } else {
             // Overflow detected
             // In this case we return the maximum positive number that a long int can store
             // We continue the loop, in order to parse all the number
-            *number = LONG_MAX;
+            number = LONG_MAX;
         }
+    }
+    if (index > 0) {
+        *value = number;
     }
     return index;
 }
@@ -90,7 +91,7 @@ static int str_to_int(
     } while (0)
 
 static int                      // Return the amount of characters that would have been written if we had enough size
-convert_int_to_str(
+int_to_str(
     char **buf,                 // Buffer in which we must write the output string
     size_t *const sz,           // Size of the buffer
     const unsigned int base,    // Integer base (8, 10 or 16)
@@ -176,8 +177,11 @@ static long int float_exponent_form(double *const value, const unsigned int base
 
 #define ABS(x)  (((x) >= 0) ? (x) : -(x))
 
+// TODO: Implement a sort of generics with this functions
+// The current version will be just to slow in embedded
+
 static int                      // Return the amount of characters that would have been written if we had enough size
-convert_float_to_str(
+float_to_str(
     char **buf,                 // Buffer in which we must write the output string
     size_t *const sz,           // Size of the buffer
     const unsigned int base,    // Integer base (10 or 16)
@@ -235,7 +239,7 @@ convert_float_to_str(
             PUTCHAR(uppercase ? 'E' : 'e');
         }
         written++;
-        written += convert_int_to_str(buf, sz, 10, uppercase, true, true, ((base == 10) ? 2 : 1), exponent);
+        written += int_to_str(buf, sz, 10, uppercase, true, true, ((base == 10) ? 2 : 1), exponent);
     }
     // This function doesn't need to introduce null termination to the buffer
     // This is responsability of its caller
@@ -245,9 +249,9 @@ convert_float_to_str(
 static int put_string(
     char **buf,
     size_t *const sz,
-    const int max_chars,
-    const bool fill_with_spaces_before, // Fill with spaces before the beginning of the string
-    const bool fill_with_spaces_after, // Fill with spaces after the end of the string
+    const int width,
+    const int precision,
+    const bool left_justify, // Right justification is the default
     const char *string
 )
 {
@@ -255,21 +259,21 @@ static int put_string(
     if (string == NULL) {
         string = "(null)";
     }
-    if (fill_with_spaces_before) {
-        int spaces = max_chars - (int)strlen(string);
+    if ((!left_justify) && (width > 0)) {
+        int spaces = width - (int)strlen(string);
         while (spaces > 0) {
             PUTCHAR(' ');
             written++;
             spaces--;
         }
     }
-    while (*string != '\0' && (max_chars < 0 || (written < max_chars))) {
+    while ((*string != '\0') && (precision < 0 || (written < precision))) {
         PUTCHAR(*string);
         string++;
         written++;
     }
-    if (fill_with_spaces_after) {
-        int spaces = max_chars - written;
+    if ((left_justify) && (width > 0)) {
+        int spaces = width - written;
         while (spaces > 0) {
             PUTCHAR(' ');
             written++;
@@ -279,250 +283,248 @@ static int put_string(
     return written;
 }
 
+// The length modifiers j, z and t are not implemented
+enum Length_Modifier {
+    Modifier_None,
+    Modifier_char, Modifier_short, Modifier_long, Modifier_longlong,
+    Modifier_longdouble
+};
+
+enum Fmt_Specifier {
+    Fmt_d, Fmt_i, Fmt_u, Fmt_o, Fmt_x,
+    Fmt_f, Fmt_e, Fmt_g, Fmt_a,
+    Fmt_c, Fmt_s, Fmt_p, Fmt_n, Fmt_percent,
+    Fmt_unknown
+};
+
+enum Fmt_Flags {
+    Flag_None, Flag_Minus, Flag_Plus, Flag_Space, Flag_Hash, Flag_Zero
+};
+
+static int parse_fmt_flags(
+    const char c,
+    enum Fmt_Flags *const flags
+)
+{
+    switch (c) {
+    case '-': *flags = Flag_Minus; return 1;
+    case '+': *flags = Flag_Plus;  return 1;
+    case ' ': *flags = Flag_Space; return 1;
+    case '#': *flags = Flag_Hash;  return 1;
+    case '0': *flags = Flag_Zero;  return 1;
+    default:  *flags = Flag_None;  return 0;
+    }
+}
+
+// TODO: scanf does not have precision
+// TODO: scanf has a special "flag" asterisk
+// TODO: In printf, the width can be replaced by asterisk instead of using numbers
+static int parse_fmt_specifier(
+    const char *const fmt,
+    enum Fmt_Specifier *const specifier,
+    enum Length_Modifier *const modifier,
+    bool *const uppercase
+)
+{
+    int index = 0;
+    *specifier = Fmt_unknown;
+    // Parse the length modifier
+    *modifier = Modifier_None;
+    if (fmt[index] == 'h') {
+        index++;
+        if (fmt[index] == 'h') {
+            index++;
+            *modifier = Modifier_char;
+        } else {
+            *modifier = Modifier_short;
+        }
+    } else if (fmt[index] == 'l') {
+        index++;
+        if (fmt[index] == 'l') {
+            index++;
+            *modifier = Modifier_longlong;
+        } else {
+            *modifier = Modifier_long;
+        }
+    } else if (fmt[index] == 'L') {
+        index++;
+        *modifier = Modifier_longdouble;
+    }
+    // Parse the format specifier
+    switch (fmt[index]) {
+    // Integers
+    case 'd': *specifier = Fmt_d; break;
+    case 'i': *specifier = Fmt_i; break;
+    case 'u': *specifier = Fmt_u; break;
+    case 'o': *specifier = Fmt_o; break;
+    case 'x':
+    case 'X': *specifier = Fmt_x; break;
+    // Floating points
+    case 'f':
+    case 'F': *specifier = Fmt_f; break;
+    case 'e':
+    case 'E': *specifier = Fmt_e; break;
+    case 'g':
+    case 'G': *specifier = Fmt_g; break;
+    case 'a':
+    case 'A': *specifier = Fmt_a; break;
+    // Others
+    case 'c': *specifier = Fmt_c; break;
+    case 's': *specifier = Fmt_s; break;
+    case 'p': *specifier = Fmt_p; break;
+    case 'n': *specifier = Fmt_n; break;
+    case '%': *specifier = Fmt_percent; break;
+    }
+    if (*specifier == Fmt_unknown) {
+        return 0;
+    }
+    *uppercase = isupper(fmt[index]);
+    // Return the amount of characters parsed
+    return (index + 1);
+}
+
+static intmax_t next_int_arg(va_list args, enum Length_Modifier modifier)
+{
+    switch (modifier) {
+    case Modifier_char: return (char)va_arg(args, int);
+    case Modifier_short: return (short)va_arg(args, int);
+    case Modifier_long: return va_arg(args, long);
+    case Modifier_longlong: return va_arg(args, long long);
+    case Modifier_None:
+    case Modifier_longdouble:
+    default: return va_arg(args, int);
+    }
+}
+
+static intmax_t next_uint_arg(va_list args, enum Length_Modifier modifier)
+{
+    switch (modifier) {
+    case Modifier_char: return (unsigned char)va_arg(args, unsigned int);
+    case Modifier_short: return (unsigned short)va_arg(args, unsigned int);
+    case Modifier_long: return (intmax_t)va_arg(args, unsigned long);
+    case Modifier_longlong: return (intmax_t)va_arg(args, unsigned long long);
+    case Modifier_None:
+    case Modifier_longdouble:
+    default: return va_arg(args, unsigned int);
+    }
+}
+
+static double next_float_arg(va_list args, enum Length_Modifier modifier)
+{
+    switch (modifier) {
+    case Modifier_longdouble: return (double)va_arg(args, long double);
+    case Modifier_None:
+    case Modifier_char:
+    case Modifier_short:
+    case Modifier_long:
+    case Modifier_longlong:
+    default: return va_arg(args, double);
+    }
+}
+
+// TODO: The zero flag is ignored with strings and when precision is specified
+
 static int __snprintf(char **buf, size_t *const sz, const char *fmt, va_list args)
 {
+    enum Fmt_Specifier specifier;
+    enum Fmt_Flags flags;
+    enum Length_Modifier modifier;
+    bool uppercase;
     int written = 0;
     const char *cursor = fmt;
     while (*cursor != '\0') {
-        if (*cursor == '%') {
-            cursor++; // Escape % character
-            if (isdigit(*cursor)) {
-                long int number;
-                const int ret = str_to_int(cursor, 10, &number);
-                if (*(cursor + ret) == 's') {
-                    // String
-                    written += put_string(buf, sz, (int)number, true, false, va_arg(args, char *));
-                    cursor += ret + 1;
-                }
-                continue;
-            }
-            switch (*cursor) {
-            case 'c':
-                PUTCHAR((char)va_arg(args, int));
-                cursor++;
-                written++;
-                break;
-            case '%':
-                PUTCHAR('%');
-                cursor++;
-                written++;
-                break;
-            case 'd':
-            case 'i':
-                // Signed integer
-                written += convert_int_to_str(buf, sz, 10, false, true, false, 0, va_arg(args, int));
-                cursor++;
-                break;
-            case 'u':
-                // Unsigned integer
-                written += convert_int_to_str(buf, sz, 10, false, false, false, 0, va_arg(args, unsigned int));
-                cursor++;
-                break;
-            case 'h':
-                if (*(cursor+1) == 'h') {
-                    if (*(cursor+2) == 'd') {
-                        // Signed char
-                        written += convert_int_to_str(buf, sz, 10, false, true, false, 0, (char)va_arg(args, int));
-                        cursor += 3;
-                    } else if (*(cursor+2) == 'u') {
-                        // Unsigned char
-                        written += convert_int_to_str(buf, sz, 10, false, true, false, 0, (unsigned char)va_arg(args, unsigned int));
-                        cursor += 3;
-                    }
-                } else if (*(cursor+1) == 'u') {
-                    // Unsigned short integer
-                    written += convert_int_to_str(buf, sz, 10, false, false, false, 0, (unsigned short)va_arg(args, unsigned int));
-                    cursor += 2;
-                } else {
-                    // Short integer
-                    written += convert_int_to_str(buf, sz, 10, false, true, false, 0, (short int)va_arg(args, int));
-                    cursor += 2;
-                }
-                break;
-            case 'l':
-                if (*(cursor+1) == 'd') {
-                    // Signed long
-                    written += convert_int_to_str(buf, sz, 10, false, true, false, 0, va_arg(args, long int));
-                    cursor += 2;
-                } else if (*(cursor+1) == 'u') {
-                    // Unsigned long
-                    written += convert_int_to_str(buf, sz, 10, false, false, false, 0, (intmax_t)va_arg(args, unsigned long));
-                    cursor += 2;
-                }
-                break;
-            case 'o':
-                // Unsigned octal
-                written += convert_int_to_str(buf, sz, 8, false, false, false, 0, va_arg(args, unsigned int));
-                cursor++;
-                break;
-            case 'x':
-                // Unsigned hexadecimal
-                written += convert_int_to_str(buf, sz, 16, false, false, false, 0, va_arg(args, unsigned int));
-                cursor++;
-                break;
-            case 'X':
-                // Unsigned hexadecimal
-                written += convert_int_to_str(buf, sz, 16, true, false, false, 0, va_arg(args, unsigned int));
-                cursor++;
-                break;
-            case '#':
-                if (*(cursor+1) == 'o') {
-                    // Unsigned octal
-                    PUTCHAR('0');
-                    written++;
-                    written += convert_int_to_str(buf, sz, 8, false, false, false, 0, va_arg(args, unsigned int));
-                    cursor += 2;
-                } else if (*(cursor+1) == 'x') {
-                    // Unsigned hexadecimal
-                    PUTCHAR('0');
-                    PUTCHAR('x');
-                    written += 2;
-                    written += convert_int_to_str(buf, sz, 16, false, false, false, 0, va_arg(args, unsigned int));
-                    cursor += 2;
-                } else if (*(cursor+1) == 'X') {
-                    // Unsigned hexadecimal
-                    PUTCHAR('0');
-                    PUTCHAR('X');
-                    written += 2;
-                    written += convert_int_to_str(buf, sz, 16, true, false, false, 0, va_arg(args, unsigned int));
-                    cursor += 2;
-                }
-                break;
-            case 'p': {
-                // Pointer
-                void *ptr = va_arg(args, void *);
-                if (ptr == NULL) {
-                    written += put_string(buf, sz, -1, false, false, "(nil)");
-                } else {
-                    PUTCHAR('0');
-                    PUTCHAR('x');
-                    written += 2;
-                    written += convert_int_to_str(buf, sz, 16, false, false, false, 0, (intmax_t)ptr);
-                }
-                cursor++;
-            } break;
-            case 'f':
-            case 'F':
-                // Decimal floating point
-                written += convert_float_to_str(buf, sz, 10, false, false, false, 6, va_arg(args, double));
-                cursor++;
-                break;
-            case 'e':
-                // Decimal floating point
-                written += convert_float_to_str(buf, sz, 10, false, true, false, 6, va_arg(args, double));
-                cursor++;
-                break;
-            case 'E':
-                // Decimal floating point
-                written += convert_float_to_str(buf, sz, 10, true, true, false, 6, va_arg(args, double));
-                cursor++;
-                break;
-            case 'g':
-                // Decimal floating point
-                written += convert_float_to_str(buf, sz, 10, false, true, true, -1, va_arg(args, double));
-                cursor++;
-                break;
-            case 'G':
-                // Decimal floating point
-                written += convert_float_to_str(buf, sz, 10, true, true, true, -1, va_arg(args, double));
-                cursor++;
-                break;
-            case 'a':
-                // Hexadecimal floating point
-                PUTCHAR('0');
-                PUTCHAR('x');
-                written += 2;
-                written += convert_float_to_str(buf, sz, 16, false, true, false, 13, va_arg(args, double));
-                cursor++;
-                break;
-            case 'A':
-                // Hexadecimal floating point
-                PUTCHAR('0');
-                PUTCHAR('X');
-                written += 2;
-                written += convert_float_to_str(buf, sz, 16, true, true, false, 13, va_arg(args, double));
-                cursor++;
-                break;
-            case '.':
-                if ((*(cursor + 1) == '*') && (*(cursor + 2) == 's')) {
-                    // String
-                    const int number = va_arg(args, int);
-                    written += put_string(buf, sz, (int)number, false, false, va_arg(args, char *));
-                    cursor += 3;
-                } else {
-                    long int number;
-                    const int ret = str_to_int(cursor+1, 10, &number);
-                    if (ret > 0) {
-                        if (*(cursor + ret + 1) == 'f') {
-                            // Decimal floating point
-                            written += convert_float_to_str(buf, sz, 10, false, false, false, (int)number, va_arg(args, double));
-                            cursor += ret + 2;
-                        } else if (*(cursor + ret + 1) == 'e') {
-                            // Decimal floating point
-                            written += convert_float_to_str(buf, sz, 10, false, true, false, (int)number, va_arg(args, double));
-                            cursor += ret + 2;
-                        } else if (*(cursor + ret + 1) == 'E') {
-                            // Decimal floating point
-                            written += convert_float_to_str(buf, sz, 10, true, true, false, (int)number, va_arg(args, double));
-                            cursor += ret + 2;
-                        } else if (*(cursor + ret + 1) == 'g') {
-                            // Decimal floating point
-                            written += convert_float_to_str(buf, sz, 10, false, true, true, (int)number, va_arg(args, double));
-                            cursor += ret + 2;
-                        } else if (*(cursor + ret + 1) == 'G') {
-                            // Decimal floating point
-                            written += convert_float_to_str(buf, sz, 10, true, true, true, (int)number, va_arg(args, double));
-                            cursor += ret + 2;
-                        } else if (*(cursor + ret + 1) == 'a') {
-                            // Hexadecimal floating point
-                            PUTCHAR('0');
-                            PUTCHAR('x');
-                            written += 2;
-                            written += convert_float_to_str(buf, sz, 16, false, true, false, (int)number, va_arg(args, double));
-                            cursor += ret + 2;
-                        } else if (*(cursor + ret + 1) == 'A') {
-                            // Hexadecimal floating point
-                            PUTCHAR('0');
-                            PUTCHAR('X');
-                            written += 2;
-                            written += convert_float_to_str(buf, sz, 16, true, true, false, (int)number, va_arg(args, double));
-                            cursor += ret + 2;
-                        } else if (*(cursor + ret + 1) == 's') {
-                            // String
-                            written += put_string(buf, sz, (int)number, false, false, va_arg(args, char *));
-                            cursor += ret + 2;
-                        }
-                    }
-                }
-                break;
-            case 's': 
-                written += put_string(buf, sz, -1, false, false, va_arg(args, char *));
-                cursor++;
-                break;
-            case '-': {
-                long int number;
-                const int ret = str_to_int(cursor+1, 10, &number);
-                if (ret > 0) {
-                    if (*(cursor + ret + 1) == 's') {
-                        // String
-                        written += put_string(buf, sz, (int)number, false, true, va_arg(args, char *));
-                        cursor += ret + 2;
-                    }
-                }
-            } break;
-            case 'n': {
-                // Return the number of characters written so far
-                int *written_ptr = va_arg(args, int *);
-                *written_ptr = written;
-                cursor++;
-            } break;
-            default: // Unhandled format specifier
-                break;
-            }
-        } else {
+        if (*cursor != '%') {
             PUTCHAR(*cursor);
             cursor++;
             written++;
+        } else {
+            cursor++; // Escape % character
+            // snprintf format specifier follows this pattern:
+            // %[flags][width][.precision][length]specifier
+            // https://cplusplus.com/reference/cstdio/printf/
+            int parsed_chars = parse_fmt_flags(*cursor, &flags);
+            long int width = -1, precision = -1;
+            parsed_chars += str_to_int((cursor+parsed_chars), 10, &width);
+            if (*(cursor+parsed_chars) == '.') {
+                parsed_chars++;
+                if (*(cursor+parsed_chars) == '*') {
+                    parsed_chars++;
+                    precision = va_arg(args, int);
+                } else {
+                    parsed_chars += str_to_int((cursor+parsed_chars), 10, &precision);
+                }
+            }
+            parsed_chars += parse_fmt_specifier((cursor+parsed_chars), &specifier, &modifier, &uppercase);
+            // If the format specifier was fully parsed, update the cursor position
+            if (specifier != Fmt_unknown) {
+                cursor += parsed_chars;
+            }
+            switch (specifier) {
+            case Fmt_d:
+            case Fmt_i: // Signed integer
+                written += int_to_str(buf, sz, 10, uppercase, true, false, 0, next_int_arg(args, modifier));
+                break;
+            case Fmt_u: // Unsigned integer
+                written += int_to_str(buf, sz, 10, uppercase, false, false, 0, next_uint_arg(args, modifier));
+                break;
+            case Fmt_o: // Unsigned integer in octal form
+                if (flags == Flag_Hash) {
+                    PUTCHAR('0');
+                    written++;
+                }
+                written += int_to_str(buf, sz, 8, uppercase, false, false, 0, next_uint_arg(args, modifier));
+                break;
+            case Fmt_x: // Unsigned integer in hexadecimal form
+                if (flags == Flag_Hash) {
+                    PUTCHAR('0');
+                    PUTCHAR(uppercase ? 'X' : 'x');
+                    written += 2;
+                }
+                written += int_to_str(buf, sz, 16, uppercase, false, false, precision < 0 ? 0 : (int)precision, next_uint_arg(args, modifier));
+                break;
+            case Fmt_f: // Decimal floating point
+                written += float_to_str(buf, sz, 10, uppercase, false, false, precision < 0 ? 6 : (int)precision, next_float_arg(args, modifier));
+                break;
+            case Fmt_e: // Decimal floating point in exponent form
+                written += float_to_str(buf, sz, 10, uppercase, true, false, precision < 0 ? 6 : (int)precision, next_float_arg(args, modifier));
+                break;
+            case Fmt_g: // Decimal floating point in shortest form
+                written += float_to_str(buf, sz, 10, uppercase, true, true, (int)precision, next_float_arg(args, modifier));
+                break;
+            case Fmt_a: // Decimal floating point in hexadecimal form
+                PUTCHAR('0');
+                PUTCHAR(uppercase ? 'X' : 'x');
+                written += 2;
+                written += float_to_str(buf, sz, 16, uppercase, true, false, precision < 0 ? 13 : (int)precision, next_float_arg(args, modifier));
+                break;
+            case Fmt_c: // Character
+                PUTCHAR((char)va_arg(args, int));
+                written++;
+                break;
+            case Fmt_s: // String
+                written += put_string(buf, sz, (int)width, (int)precision, (flags == Flag_Minus), va_arg(args, char *));
+                break;
+            case Fmt_p: { // Pointer
+                const void *ptr = va_arg(args, void *);
+                if (ptr == NULL) {
+                    written += put_string(buf, sz, -1, -1, false, "(nil)");
+                } else {
+                    PUTCHAR('0');
+                    PUTCHAR('x');
+                    written += 2;
+                    written += int_to_str(buf, sz, 16, false, false, false, 0, (intmax_t)ptr);
+                }
+            } break;
+            case Fmt_n: { // Return the number of characters written so far
+                int *ptr = va_arg(args, int *);
+                *ptr = written;
+            } break;
+            case Fmt_percent:
+            case Fmt_unknown:
+                PUTCHAR('%');
+                written++;
+                break;
+            }
         }
     }
     // null termination
