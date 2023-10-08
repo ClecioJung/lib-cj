@@ -1,7 +1,7 @@
 CC 		:=  gcc
 CFLAGS  := 	-W -Wall -Wextra -pedantic \
 			-Wconversion -Wswitch-enum \
-			-Wno-nonnull -Wno-nonnull-compare -Wno-format-truncation \
+			-Wno-nonnull -Wno-nonnull-compare -Wno-format \
 			-flto -std=c11
 
 EXEC = main

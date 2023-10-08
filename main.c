@@ -42,6 +42,29 @@
 
 #ifdef MY_IMPLEMENTATION
 
+// The length modifiers j, z and t are not implemented
+enum Length_Modifier {
+    Modifier_None,
+    Modifier_char, Modifier_short, Modifier_long, Modifier_longlong,
+    Modifier_longdouble
+};
+
+enum Fmt_Specifier {
+    Fmt_d, Fmt_i, Fmt_u, Fmt_o, Fmt_x,
+    Fmt_f, Fmt_e, Fmt_g, Fmt_a,
+    Fmt_c, Fmt_s, Fmt_p, Fmt_n, Fmt_percent,
+    Fmt_unknown
+};
+
+enum Fmt_Flags {
+    Flag_None  = 0x00,
+    Flag_Minus = 0x01,
+    Flag_Plus  = 0x02,
+    Flag_Space = 0x04,
+    Flag_Hash  = 0x08,
+    Flag_Zero  = 0x10
+};
+
 // Parses a integer number using base 8, 10 or 16
 static int str_to_int(
     const char *fmt,
@@ -94,11 +117,12 @@ static int                      // Return the amount of characters that would ha
 int_to_str(
     char **buf,                 // Buffer in which we must write the output string
     size_t *const sz,           // Size of the buffer
-    const unsigned int base,    // Integer base (8, 10 or 16)
+    const int width,
+    const int precision,
+    const enum Fmt_Flags flags,
     const bool uppercase,       // The hexadecimal characters should be in upper case?
+    const unsigned int base,    // Integer base (8, 10 or 16)
     const bool sign,            // The integer value informed is signed?
-    const bool must_add_sign,   // Always add sign to the string?
-    const int digits,           // Quantity of digits that we must complete with zeros
     const intmax_t value        // Integer value to be converted to string
 )
 {
@@ -110,14 +134,43 @@ int_to_str(
         str[written++] = VALUE_TO_CHAR((char)(x % base), uppercase);
         x /= base;
     } while (x > 0);
-    while (written < digits) {
+    // Flag_Zero is ignored if precision is informed
+    int zeros = (precision >= 0) ? precision : ((flags & Flag_Zero) ? width : 0);
+    if ((flags & Flag_Zero) && (flags & Flag_Hash)) {
+        if (base == 8) {
+            zeros -= 1;
+        } else if (base == 16) {
+            zeros -= 2;
+        }
+    }
+    while (written < zeros) {
         str[written++] = '0';
     }
-    if (must_add_sign || negative) {
-        str[written++] = negative ? '-' : '+';
+    if (flags & Flag_Hash) {
+        if (base == 8) {
+            str[written++] = '0';
+        } else if (base == 16) {
+            str[written++] = uppercase ? 'X' : 'x';
+            str[written++] = ('0');
+        }
+    }
+    if ((base != 8) && (negative || (flags & Flag_Plus))) {
+        if (!sign) {
+            str[written++] = (flags & Flag_Hash) ? '+' : ' ';
+        } else {
+            str[written++] = negative ? '-' : '+';
+        }
+    }
+    const bool left_justify = flags & Flag_Minus;
+    while (!left_justify && written < width) {
+        str[written++] = ' ';
     }
     for (int index = written; index > 0; index--) {
         PUTCHAR(str[index-1]);
+    }
+    while (left_justify && written < width) {
+        PUTCHAR(' ');
+        written++;
     }
     // This function doesn't need to introduce null termination to the buffer
     // This is responsability of its caller
@@ -184,15 +237,21 @@ static int                      // Return the amount of characters that would ha
 float_to_str(
     char **buf,                 // Buffer in which we must write the output string
     size_t *const sz,           // Size of the buffer
-    const unsigned int base,    // Integer base (10 or 16)
-    const bool uppercase,       // The hexadecimal characters should be in upper case?
+    const int width,
+    int precision,
+    const enum Fmt_Flags flags,
     bool exponent_form,         // Use exponent form?
     const bool short_form,      // Use short form?
-    int decimal_places,         // Decimal places
+    const bool uppercase,       // The hexadecimal characters should be in upper case?
+    const unsigned int base,    // Integer base (10 or 16)
     const double value          // Float value to be converted to string
 )
 {
     char str[32];
+    (void)width;
+    //const bool pad_with_zeros = flags & Flag_Zero;
+    //const bool left_justify = flags & Flag_Minus;
+    //const bool must_add_sign = flags & Flag_Plus;
     const bool negative = value < 0.0;
     double x = negative ? (-value) : value;
     int written = 0;
@@ -203,16 +262,19 @@ float_to_str(
     }
     if (short_form) {
         exponent_form = (ABS(exponent) >= 5);
-        if (decimal_places < 0) {
-            decimal_places = exponent_form ? 5 : (int)(5L - exponent);
+        if (precision < 0) {
+            precision = exponent_form ? 5 : (int)(5L - exponent);
         }
         if (!exponent_form) {
             x = original_x;
         }
     }
-    for (int exp = decimal_places; exp > 0; exp--) {
+    if (precision < 0) { // Default precision
+        precision = (base == 16) ? 13 : 6;
+    }
+    for (int exp = precision; exp > 0; exp--) {
         const double y = scale_radix_exp(x, base, exp);
-        const char c = (char)div_remainder(y, base, exp == decimal_places);
+        const char c = (char)div_remainder(y, base, exp == precision);
         if ((!short_form) || (c != 0) || (written != 0)) {
             str[written++] = VALUE_TO_CHAR(c, uppercase);
         }
@@ -239,7 +301,7 @@ float_to_str(
             PUTCHAR(uppercase ? 'E' : 'e');
         }
         written++;
-        written += int_to_str(buf, sz, 10, uppercase, true, true, ((base == 10) ? 2 : 1), exponent);
+        written += int_to_str(buf, sz, -1, ((base == 10) ? 2 : 1), Flag_Plus, uppercase, 10, true, exponent);
     }
     // This function doesn't need to introduce null termination to the buffer
     // This is responsability of its caller
@@ -283,37 +345,24 @@ static int put_string(
     return written;
 }
 
-// The length modifiers j, z and t are not implemented
-enum Length_Modifier {
-    Modifier_None,
-    Modifier_char, Modifier_short, Modifier_long, Modifier_longlong,
-    Modifier_longdouble
-};
-
-enum Fmt_Specifier {
-    Fmt_d, Fmt_i, Fmt_u, Fmt_o, Fmt_x,
-    Fmt_f, Fmt_e, Fmt_g, Fmt_a,
-    Fmt_c, Fmt_s, Fmt_p, Fmt_n, Fmt_percent,
-    Fmt_unknown
-};
-
-enum Fmt_Flags {
-    Flag_None, Flag_Minus, Flag_Plus, Flag_Space, Flag_Hash, Flag_Zero
-};
-
 static int parse_fmt_flags(
-    const char c,
+    const char *const fmt,
     enum Fmt_Flags *const flags
 )
 {
-    switch (c) {
-    case '-': *flags = Flag_Minus; return 1;
-    case '+': *flags = Flag_Plus;  return 1;
-    case ' ': *flags = Flag_Space; return 1;
-    case '#': *flags = Flag_Hash;  return 1;
-    case '0': *flags = Flag_Zero;  return 1;
-    default:  *flags = Flag_None;  return 0;
+    *flags = Flag_None;
+    int index = 0;
+    for (; fmt[index] != '\0'; index++) {
+        switch (fmt[index]) {
+        case '-': *flags |= Flag_Minus; break;
+        case '+': *flags |= Flag_Plus;  break;
+        case ' ': *flags |= Flag_Space; break;
+        case '#': *flags |= Flag_Hash;  break;
+        case '0': *flags |= Flag_Zero;  break;
+        default: return index;
+        }
     }
+    return index;
 }
 
 // TODO: scanf does not have precision
@@ -442,7 +491,7 @@ static int __snprintf(char **buf, size_t *const sz, const char *fmt, va_list arg
             // snprintf format specifier follows this pattern:
             // %[flags][width][.precision][length]specifier
             // https://cplusplus.com/reference/cstdio/printf/
-            int parsed_chars = parse_fmt_flags(*cursor, &flags);
+            int parsed_chars = parse_fmt_flags(cursor, &flags);
             long int width = -1, precision = -1;
             parsed_chars += str_to_int((cursor+parsed_chars), 10, &width);
             if (*(cursor+parsed_chars) == '.') {
@@ -462,57 +511,45 @@ static int __snprintf(char **buf, size_t *const sz, const char *fmt, va_list arg
             switch (specifier) {
             case Fmt_d:
             case Fmt_i: // Signed integer
-                written += int_to_str(buf, sz, 10, uppercase, true, false, 0, next_int_arg(args, modifier));
+                written += int_to_str(buf, sz, (int)width, (int)precision, flags, uppercase, 10, true, next_int_arg(args, modifier));
                 break;
             case Fmt_u: // Unsigned integer
-                written += int_to_str(buf, sz, 10, uppercase, false, false, 0, next_uint_arg(args, modifier));
+                written += int_to_str(buf, sz, (int)width, (int)precision, flags, uppercase, 10, false, next_uint_arg(args, modifier));
                 break;
             case Fmt_o: // Unsigned integer in octal form
-                if (flags == Flag_Hash) {
-                    PUTCHAR('0');
-                    written++;
-                }
-                written += int_to_str(buf, sz, 8, uppercase, false, false, 0, next_uint_arg(args, modifier));
+                written += int_to_str(buf, sz, (int)width, (int)precision, flags, uppercase, 8, false, next_uint_arg(args, modifier));
                 break;
             case Fmt_x: // Unsigned integer in hexadecimal form
-                if (flags == Flag_Hash) {
-                    PUTCHAR('0');
-                    PUTCHAR(uppercase ? 'X' : 'x');
-                    written += 2;
-                }
-                written += int_to_str(buf, sz, 16, uppercase, false, false, precision < 0 ? 0 : (int)precision, next_uint_arg(args, modifier));
+                written += int_to_str(buf, sz, (int)width, (int)precision, flags, uppercase, 16, false, next_uint_arg(args, modifier));
                 break;
             case Fmt_f: // Decimal floating point
-                written += float_to_str(buf, sz, 10, uppercase, false, false, precision < 0 ? 6 : (int)precision, next_float_arg(args, modifier));
+                written += float_to_str(buf, sz, (int)width, (int)precision, flags, false, false, uppercase, 10, next_float_arg(args, modifier));
                 break;
             case Fmt_e: // Decimal floating point in exponent form
-                written += float_to_str(buf, sz, 10, uppercase, true, false, precision < 0 ? 6 : (int)precision, next_float_arg(args, modifier));
+                written += float_to_str(buf, sz, (int)width, (int)precision, flags, true, false, uppercase, 10, next_float_arg(args, modifier));
                 break;
             case Fmt_g: // Decimal floating point in shortest form
-                written += float_to_str(buf, sz, 10, uppercase, true, true, (int)precision, next_float_arg(args, modifier));
+                written += float_to_str(buf, sz, (int)width, (int)precision, flags, false, true, uppercase, 10, next_float_arg(args, modifier));
                 break;
             case Fmt_a: // Decimal floating point in hexadecimal form
                 PUTCHAR('0');
                 PUTCHAR(uppercase ? 'X' : 'x');
                 written += 2;
-                written += float_to_str(buf, sz, 16, uppercase, true, false, precision < 0 ? 13 : (int)precision, next_float_arg(args, modifier));
+                written += float_to_str(buf, sz, (int)width, (int)precision, flags, true, false, uppercase, 16, next_float_arg(args, modifier));
                 break;
             case Fmt_c: // Character
                 PUTCHAR((char)va_arg(args, int));
                 written++;
                 break;
             case Fmt_s: // String
-                written += put_string(buf, sz, (int)width, (int)precision, (flags == Flag_Minus), va_arg(args, char *));
+                written += put_string(buf, sz, (int)width, (int)precision, (flags & Flag_Minus), va_arg(args, char *));
                 break;
             case Fmt_p: { // Pointer
                 const void *ptr = va_arg(args, void *);
                 if (ptr == NULL) {
-                    written += put_string(buf, sz, -1, -1, false, "(nil)");
+                    written += put_string(buf, sz, (int)width, (int)precision, (flags & Flag_Minus), "(nil)");
                 } else {
-                    PUTCHAR('0');
-                    PUTCHAR('x');
-                    written += 2;
-                    written += int_to_str(buf, sz, 16, false, false, false, 0, (intmax_t)ptr);
+                    written += int_to_str(buf, sz, (int)width, (int)precision, (flags | Flag_Hash), uppercase, 16, false, (intmax_t)ptr);
                 }
             } break;
             case Fmt_n: { // Return the number of characters written so far
@@ -578,6 +615,7 @@ void expect_int(const char *const  file, const unsigned int line, const int valu
         EXPECT_INT(ret, strlen(expected)); \
     } while (0) \
 
+// TODO: We must have tests for multiple flags!
 int main(void)
 {
     TEST_SNPRINTF("Hello World!", "Hello World!");
@@ -596,30 +634,51 @@ int main(void)
     }
     // Signed decimal integer
     TEST_SNPRINTF("10 -10 -2147483648 2147483647", "%d %d %d %d", 10, -10, INT_MIN, INT_MAX);
+    TEST_SNPRINTF("Out of bounds test: -2147483648 -1", "Out of bounds test: %d %d", (1L + INT_MAX), ULONG_MAX);
+    TEST_SNPRINTF("Testing flags:   10   1 0002 3   +4  0016 0025", "Testing flags: %4d % 3d %04d %-3d %+2d %5.4d %.4d", 10, 1, 2, 3, 4, 16, 25);
     // Unsigned decimal integer
     TEST_SNPRINTF("128 0 4294967295", "%u %u %u", 128, 0, UINT_MAX);
+    TEST_SNPRINTF("Out of bounds test: 0 4294967295", "Out of bounds test: %u %u", (1L + UINT_MAX), ULONG_MAX);
+    TEST_SNPRINTF("Testing flags:   10   1 0002 3    4  0016 0025", "Testing flags: %4u % 3u %04u %-3u %+2u %5.4u %.4u", 10, 1, 2, 3, 4, 16, 25);
     // Signed char
     TEST_SNPRINTF("23 -82 -128 127", "%hhd %hhd %hhd %hhd", (char)23, (char)-82, CHAR_MIN, CHAR_MAX);
+    TEST_SNPRINTF("Out of bounds test: -128 -1", "Out of bounds test: %hhd %hhd", (1L + CHAR_MAX), ULONG_MAX);
+    TEST_SNPRINTF("Testing flags:   10   1 0002 3   +4  0016 0025", "Testing flags: %4hhd % 3hhd %04hhd %-3hhd %+2hhd %5.4hhd %.4hhd", 10, 1, 2, 3, 4, 16, 25);
     // Unsigned char
     TEST_SNPRINTF("233 0 255", "%hhu %hhu %hhu", (unsigned char)233, (unsigned char)0, UCHAR_MAX);
+    TEST_SNPRINTF("Out of bounds test: 0 255", "Out of bounds test: %hhu %hhu", (1L + UCHAR_MAX), ULONG_MAX);
+    TEST_SNPRINTF("Testing flags:   10   1 0002 3    4  0016 0025", "Testing flags: %4hhu % 3hhu %04hhu %-3hhu %+2hhu %5.4hhu %.4hhu", 10, 1, 2, 3, 4, 16, 25);
     // Signed short integer
     TEST_SNPRINTF("15 -82 -32768 32767", "%hd %hd %hd %hd", (short)15, (short)-82, SHRT_MIN, SHRT_MAX);
+    TEST_SNPRINTF("Out of bounds test: -32768 -1", "Out of bounds test: %hd %hd", (1L + SHRT_MAX), ULONG_MAX);
+    TEST_SNPRINTF("Testing flags:   10   1 0002 3   +4  0016 0025", "Testing flags: %4hd % 3hd %04hd %-3hd %+2hd %5.4hd %.4hd", 10, 1, 2, 3, 4, 16, 25);
     // Unsigned short integer
     TEST_SNPRINTF("128 0 65535", "%hu %hu %hu", (unsigned short)128, (unsigned short)0, USHRT_MAX);
+    TEST_SNPRINTF("Out of bounds test: 0 65535", "Out of bounds test: %hu %hu", (1L + USHRT_MAX), ULONG_MAX);
+    TEST_SNPRINTF("Testing flags:   10   1 0002 3    4  0016 0025", "Testing flags: %4hu % 3hu %04hu %-3hu %+2hu %5.4hu %.4hu", 10, 1, 2, 3, 4, 16, 25);
     // Signed long integer
     TEST_SNPRINTF("100 -100 -9223372036854775808 9223372036854775807", "%ld %ld %ld %ld", (long)100, (long)-100, LONG_MIN, LONG_MAX);
+    TEST_SNPRINTF("Testing flags:   10   1 0002 3   +4  0016 0025", "Testing flags: %4ld % 3ld %04ld %-3ld %+2ld %5.4ld %.4ld", 10, 1, 2, 3, 4, 16, 25);
     // Unsigned long integer
     TEST_SNPRINTF("128 0 18446744073709551615", "%lu %lu %lu", (unsigned long)128, (unsigned long)0, ULONG_MAX);
+    TEST_SNPRINTF("Testing flags:   10   1 0002 3    4  0016 0025", "Testing flags: %4lu % 3lu %04lu %-3lu %+2lu %5.4lu %.4lu", 10, 1, 2, 3, 4, 16, 25);
     // Character
     TEST_SNPRINTF("Characters: A c 7", "Characters: %c %c %c", 65, 'c', '7');
     // Percent character
     TEST_SNPRINTF("Percent character: %", "Percent character: %%");
     // Unsigned octal
-    TEST_SNPRINTF("0200 0 037777777777", "%#o %o %#o", 128, 0, UINT_MAX);
+    TEST_SNPRINTF("200 0 37777777777", "%o %o %o", 128, 0, UINT_MAX);
+    TEST_SNPRINTF("Out of bounds test: 0 37777777777", "Out of bounds test: %o %o", (1L + UINT_MAX), ULONG_MAX);
+    TEST_SNPRINTF("Testing flags:   12  13 0014 15  16  0017 020", "Testing flags: %4o % 3o %04o %-3o %+2o %5.4o %#o", 10, 11, 12, 13, 14, 15, 16);
     // Unsigned hexadecimal
     TEST_SNPRINTF("0xfa 0 ffffffff 4E 0XFFFFFFFF", "%#x %x %x %X %#X", 250, 0, UINT_MAX, 78, UINT_MAX);
+    TEST_SNPRINTF("Out of bounds test: 0 ffffffff", "Out of bounds test: %x %x", (1L + UINT_MAX), ULONG_MAX);
+    TEST_SNPRINTF("Testing flags:    a   b 000c d    e  000f 0x10", "Testing flags: %4x % 3x %04x %-3x %+2x %5.4x %#x", 10, 11, 12, 13, 14, 15, 16);
+    TEST_SNPRINTF("Testing flags:    A   B 000C D    E  000F 0X10", "Testing flags: %4X % 3X %04X %-3X %+2X %5.4X %#X", 10, 11, 12, 13, 14, 15, 16);
     // Pointer address
     TEST_SNPRINTF("Pointer addresses: 0x456789ab 0x6789ab (nil)", "Pointer addresses: %p %p %p", (void*)0x456789AB, (void*)0x006789AB, NULL);
+    TEST_SNPRINTF("Testing flags:    (nil)    (nil)    (nil) (nil)       (nil) (nil)", "Testing flags: %8p % 8p %08p %-8p %+8p %2.6p", NULL, NULL, NULL, NULL, NULL, NULL);
+    TEST_SNPRINTF("Testing flags:      0xa      0xb 0x00000c 0xd          +0xe 0x00000f", "Testing flags: %8p % 8p %08p %-8p %+8p %2.6p", (void*)10, (void*)11, (void*)12, (void*)13, (void*)14, (void*)15);
     // Decimal floating point
     TEST_SNPRINTF("392.567800 0.001000 0.10 0.001000", "%f %f %.2f %F", 392.5678, 1e-3, 0.1, 1e-3);
     // Scientific notation (mantissa/exponent)
