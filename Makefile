@@ -6,15 +6,20 @@ CFLAGS  := 	-W -Wall -Wextra -pedantic \
 
 EXEC = main
 
-all: $(EXEC)
+all: test_libc test_libcj
 
-%: %.c Makefile
+test_libc: main.c Makefile
 	$(CC) $(CFLAGS) $(filter %.c %.s %.o,$^) -o $@
 
-run: $(EXEC)
-	./$(EXEC)
+test_libcj: main.c libcj.c libcj.h Makefile
+	$(CC) $(CFLAGS) $(filter %.c %.s %.o,$^) -o $@ -DUSE_LIB_CJ
+
+test: test_libc test_libcj
+	./test_libc
+	./test_libcj
+	@ echo "Congrats! All tests passed!"
 
 clean:
-	rm -rf $(EXEC) *.o
+	rm -rf test* *.o
 
 .PHONY: all clean run
