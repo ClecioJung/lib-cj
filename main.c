@@ -33,11 +33,9 @@
 #include "libcj.h"
 #endif
 
-#define BUFFER_SIZE 1024
-
 // TODO: Introduce a function to escape special chars
 #define EXPECT_STR(value, to_equal) expect_str(__FILE__, __LINE__, value, to_equal)
-void expect_str(const char *const  file, const unsigned int line, const char *const value, const char *const to_equal)
+void expect_str(const char *const file, const unsigned int line, const char *const value, const char *const to_equal)
 {
     if (strcmp(value, to_equal) != 0) {
         fprintf(stderr, "%s:%u [TEST FAILED] expected\n    %s\n  but got\n    %s\n", file, line, to_equal, value);
@@ -46,13 +44,25 @@ void expect_str(const char *const  file, const unsigned int line, const char *co
 }
 
 #define EXPECT_INT(value, to_equal) expect_int(__FILE__, __LINE__, value, to_equal)
-void expect_int(const char *const  file, const unsigned int line, const int value, const int to_equal)
+void expect_int(const char *const file, const unsigned int line, const int value, const int to_equal)
 {
     if (value != to_equal) {
         fprintf(stderr, "%s:%u [TEST FAILED] expected\n    %d\n  but got\n    %d\n", file, line, to_equal, value);
         exit(EXIT_FAILURE);
     }
 }
+
+void check_strlen(void)
+{
+    const char *const empty_str = "";
+    const char *const hello_world = "Hello World!";
+    const char *const test = "Test";
+    EXPECT_INT((int)strlen(empty_str), 0);
+    EXPECT_INT((int)strlen(hello_world), 12);
+    EXPECT_INT((int)strlen(test), 4);
+}
+
+#define BUFFER_SIZE 1024
 
 #define TEST_SNPRINTF(expected, ...) \
     do { \
@@ -63,7 +73,7 @@ void expect_int(const char *const  file, const unsigned int line, const int valu
     } while (0) \
 
 // TODO: We must have tests for multiple flags!
-int main(void)
+void check_snprintf(void)
 {
     TEST_SNPRINTF("Hello World!", "Hello World!");
     {
@@ -152,6 +162,12 @@ int main(void)
         EXPECT_INT(middle, 8);
         EXPECT_INT(end, expected_size);
     }
+}
+
+int main(void)
+{
+    check_strlen();
+    check_snprintf();
     return EXIT_SUCCESS;
 }
 

@@ -31,6 +31,8 @@
 #define __attribute__(a)
 #endif
 
+size_t strlen(const char *str);
+
 int snprintf(char *buf, size_t sz, const char *fmt, ...) __attribute__((format(printf, 3, 4)));
 
 #endif  // __LIB_CJ

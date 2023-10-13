@@ -24,7 +24,7 @@
 // SOURCE
 //------------------------------------------------------------------------------
 
-#include <ctype.h> // TODO: Remove this dependancy
+#include <ctype.h> // TODO: Remove this dependency
 #include <float.h>
 #include <limits.h>
 #include <math.h>
@@ -32,17 +32,82 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <string.h> // TODO: Remove this dependancy
 
 #include "libcj.h"
 
-// https://cplusplus.com/reference/cstdio/scanf/
-
-// TODO: strtod, strstr, strchr, strlen, isspace, sscanf
 // TODO: Implement some kind of generics in C using preprocessor
 // TODO: Try to make it fast and optimized
-// TODO: We should use macro like CASE() to simplify parsing of codes in __snprintf
 
+//------------------------------------------------------------------------------
+// CTYPE.H
+//------------------------------------------------------------------------------
+
+// TODO: isalnum    Check if character is alphanumeric
+// TODO: isalpha    Check if character is alphabetic
+// TODO: isblank    Check if character is blank
+// TODO: iscntrl    Check if character is a control character
+// TODO: isdigit    Check if character is decimal digit
+// TODO: isgraph    Check if character has graphical representation
+// TODO: islower    Check if character is lowercase letter
+// TODO: isprint    Check if character is printable
+// TODO: ispunct    Check if character is a punctuation character
+// TODO: isspace    Check if character is a white-space
+// TODO: isupper    Check if character is uppercase letter
+// TODO: isxdigit   Check if character is hexadecimal digit
+// TODO: tolower    Convert uppercase letter to lowercase
+// TODO: toupper    Convert lowercase letter to uppercase
+
+//------------------------------------------------------------------------------
+// STRING.H
+//------------------------------------------------------------------------------
+
+// TODO: memcpy     Copy block of memory
+// TODO: memmove    Move block of memory
+// TODO: strcpy     Copy string
+// TODO: strncpy    Copy characters from string
+// TODO: strcat     Concatenate strings
+// TODO: strncat    Append characters from string
+// TODO: memcmp     Compare two blocks of memory
+// TODO: strcmp     Compare two strings
+// TODO: strncmp    Compare characters of two strings
+// TODO: memchr     Locate character in block of memory
+// TODO: strchr     Locate first occurrence of character in string
+// TODO: strcspn    Get span until character in string
+// TODO: strpbrk    Locate characters in string
+// TODO: strrchr    Locate last occurrence of character in string
+// TODO: strspn     Get span of character set in string
+// TODO: strstr     Locate substring
+// TODO: strtok     Split string into tokens
+// TODO: memset     Fill block of memory
+
+size_t strlen(const char *str)
+{
+    size_t i = 0;
+    while (str[i] != '\0') {
+        i++;
+    }
+    return i;
+}
+
+//------------------------------------------------------------------------------
+// STDLIB.H
+//------------------------------------------------------------------------------
+
+// TODO: atof       Convert string to double
+// TODO: atoi       Convert string to integer
+// TODO: atol       Convert string to long integer
+// TODO: atoll      Convert string to long long integer
+// TODO: strtod     Convert string to double
+// TODO: strtof     Convert string to float
+// TODO: strtol     Convert string to long integer
+// TODO: strtold    Convert string to long double
+// TODO: strtoll    Convert string to long long integer
+// TODO: strtoul    Convert string to unsigned long integer
+// TODO: strtoull   Convert string to unsigned long long integer
+
+//------------------------------------------------------------------------------
+// STDIO.H
+//------------------------------------------------------------------------------
 
 // The length modifiers j, z and t are not implemented
 enum Length_Modifier {
@@ -585,6 +650,14 @@ int snprintf(char *buf, size_t sz, const char *fmt, ...)
     va_end(args);
     return written;
 }
+
+// TODO: sprintf    Write formatted data to string
+// TODO: vsnprintf  Write formatted data from variable argument list to sized buffer
+// TODO: vsprintf   Write formatted data from variable argument list to string
+
+// https://cplusplus.com/reference/cstdio/scanf/
+// TODO: sscanf     Read formatted data from string
+// TODO: vsscanf    Read formatted data from string into variable argument list
 
 //------------------------------------------------------------------------------
 // END

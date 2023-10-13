@@ -6,12 +6,13 @@ ifndef CC
 	CC := gcc
 endif
 CFLAGS := -W -Wall -Wextra -pedantic \
-		  -Wconversion -Wswitch-enum \
-		  -Wno-nonnull -Wno-nonnull-compare -Wno-format \
-		  -flto -std=c11
+          -Wconversion -Wswitch-enum \
+          -Wno-nonnull -Wno-nonnull-compare -Wno-format \
+          -flto -std=c11
 
 # List of functions linked from libcj or libc
-FUNCTIONS := snprintf
+FUNCTIONS := strlen \
+             snprintf
 
 # Function that uses nm to check if a function name (2nd argument) is undefined in a object file (1st argument)
 is_undefined = $(if $(shell nm -uj "$(1)" | grep "$(2)"),undefined)
