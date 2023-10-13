@@ -180,6 +180,7 @@ static int str_to_int(
         }                       \
     } while (0)
 
+
 static int                      // Return the amount of characters that would have been written if we had enough size
 int_to_str(
     char **buf,                 // Buffer in which we must write the output string
@@ -193,42 +194,43 @@ int_to_str(
     const intmax_t value        // Integer value to be converted to string
 )
 {
-    char str[32];
+    char str[32]; // TODO: Check for boundaries
+    const bool left_justify = flags & Flag_Minus;
     const bool negative = sign && (value < 0);
+    // Pointers are the only unsigned integer that can have the plus sign
+    // We detect this condition by checking both flags Flag_Plus and Flag_Hash
+    const bool include_sign = negative || ((flags & Flag_Plus) && (sign || (flags & Flag_Hash)));
+    const unsigned int base_padding = ((flags & Flag_Hash) && (base != 10) && (value != 0)) ? (base / 8) : 0;
+    // Padding using for sign and base specifiers
+    const int left_padding = (int)(include_sign ? (base_padding+1) : base_padding);
+    const bool use_precision = (precision >= 0) || (flags & Flag_Minus);
+    // Flag_Zero is ignored if precision or Flag_Minus are informed
+    const int zeros = use_precision ? precision : ((flags & Flag_Zero) ? (width-left_padding) : 0);
     uintmax_t x = (uintmax_t)(negative ? (-value) : value);
     int written = 0;
     do {
         str[written++] = VALUE_TO_CHAR((char)(x % base), uppercase);
         x /= base;
     } while (x > 0);
-    // Flag_Zero is ignored if precision is informed
-    int zeros = (precision >= 0) ? precision : ((flags & Flag_Zero) ? width : 0);
-    if ((flags & Flag_Zero) && (flags & Flag_Hash)) {
-        if (base == 8) {
-            zeros -= 1;
-        } else if (base == 16) {
-            zeros -= 2;
-        }
-    }
     while (written < zeros) {
         str[written++] = '0';
     }
-    if (flags & Flag_Hash) {
-        if (base == 8) {
-            str[written++] = '0';
-        } else if (base == 16) {
+    if (base_padding) {
+        switch (base) {
+        case 8:
+            if ((!use_precision || ((written > 0) && (str[written-1] != '0')))) {
+                str[written++] = '0';
+            }
+            break;
+        case 16:
             str[written++] = uppercase ? 'X' : 'x';
-            str[written++] = ('0');
+            str[written++] = '0';
+            break;
         }
     }
-    if ((base != 8) && (negative || (flags & Flag_Plus))) {
-        if (!sign) {
-            str[written++] = (flags & Flag_Hash) ? '+' : ' ';
-        } else {
-            str[written++] = negative ? '-' : '+';
-        }
+    if (include_sign) {
+        str[written++] = negative ? '-' : '+';
     }
-    const bool left_justify = flags & Flag_Minus;
     while (!left_justify && written < width) {
         str[written++] = ' ';
     }
@@ -588,9 +590,11 @@ static int __vsnprintf(char **buf, size_t *const sz, const char *fmt, va_list ar
                 written += int_to_str(buf, sz, (int)width, (int)precision, flags, uppercase, 10, false, next_uint_arg(args, modifier));
                 break;
             case Fmt_o: // Unsigned integer in octal form
+                flags = flags & (enum Fmt_Flags)~Flag_Plus; // This flag isn't supported for octal numbers
                 written += int_to_str(buf, sz, (int)width, (int)precision, flags, uppercase, 8, false, next_uint_arg(args, modifier));
                 break;
             case Fmt_x: // Unsigned integer in hexadecimal form
+                flags = flags & (enum Fmt_Flags)~Flag_Plus; // This flag isn't supported for hexadecimal numbers
                 written += int_to_str(buf, sz, (int)width, (int)precision, flags, uppercase, 16, false, next_uint_arg(args, modifier));
                 break;
             case Fmt_f: // Decimal floating point
