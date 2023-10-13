@@ -1,6 +1,6 @@
 // MIT License
 
-// Copyright (c) 2022 CLECIO JUNG <clecio.jung@gmail.com>
+// Copyright (c) 2023 CLECIO JUNG <clecio.jung@gmail.com>
 
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -33,6 +33,8 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h> // TODO: Remove this dependancy
+
+#include "libcj.h"
 
 // https://cplusplus.com/reference/cstdio/scanf/
 
@@ -590,7 +592,7 @@ int snprintf(char *buf, size_t sz, const char *fmt, ...)
 
 // MIT License
 
-// Copyright (c) 2022 CLECIO JUNG <clecio.jung@gmail.com>
+// Copyright (c) 2023 CLECIO JUNG <clecio.jung@gmail.com>
 
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
