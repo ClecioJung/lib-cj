@@ -378,11 +378,13 @@ float_to_str(
     return written;
 }
 
+#define MIN(x, y) (((x) < (y)) ? (x) : (y))
+
 static int put_string(
     char **buf,
     size_t *const sz,
     const int width,
-    const int precision,
+    int precision,
     const bool left_justify, // Right justification is the default
     const char *string
 )
@@ -392,17 +394,19 @@ static int put_string(
         string = "(null)";
     }
     if ((!left_justify) && (width > 0)) {
-        int spaces = width - (int)strlen(string);
+        const int len = (int)strlen(string);
+        int spaces = width - ((precision > 0) ? MIN(len, precision) : len);
         while (spaces > 0) {
             PUTCHAR(' ');
             written++;
             spaces--;
         }
     }
-    while ((*string != '\0') && (precision < 0 || (written < precision))) {
+    while ((*string != '\0') && (precision != 0)) {
         PUTCHAR(*string);
         string++;
         written++;
+        precision--;
     }
     if ((left_justify) && (width > 0)) {
         int spaces = width - written;

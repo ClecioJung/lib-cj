@@ -159,7 +159,9 @@ void check_snprintf(void)
     TEST_SNPRINTF("392.568 1e-10 0.1 1E-10", "%g %g %.2g %G", 392.5678, 1e-10, 0.1, 1e-10);
     TEST_SNPRINTF("0.1 0.001 0.00123457 0.000123457 1.23457e-05", "%g %g %g %g %g", 0.1, 1e-3, 1.234567e-3, 1.234567e-4, 1.234567e-5);
     // String of characters
-    TEST_SNPRINTF("Some null string of chars: (null)", "%s %.4s%7s %-3s%.*ss: %s", "Some", "null pointer", "string", "of", 4, "character", (char *)NULL);
+    TEST_SNPRINTF("Some null string of chars: (null)", "Some null %s of chars: %s", "string", (char *)NULL);
+    TEST_SNPRINTF("   foo bar baz test   char", "%6s %.6s %.3s %-6s %.*s", "foo", "bar", "bazzing", "test", 4, "character");
+    TEST_SNPRINTF("   foo bar      baz baz        test", "%+6s %-03s %08.3s %-08.3s %#6s", "foo", "bar", "bazzing", "bazzing", "test");
     // Nothing printed. The corresponding argument must be a pointer to a signed int.
     // The number of characters written so far is stored in the pointed location
     {
