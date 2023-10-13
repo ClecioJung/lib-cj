@@ -27,13 +27,21 @@
 #ifndef __LIB_CJ
 #define __LIB_CJ
 
+#include <stdarg.h>
+#include <stddef.h>
+
 #ifndef __GNUC__
 #define __attribute__(a)
 #endif
 
 size_t strlen(const char *str);
 
-int snprintf(char *buf, size_t sz, const char *fmt, ...) __attribute__((format(printf, 3, 4)));
+int sprintf(char *buf, const char *fmt, ...)
+    __attribute__((format(printf, 2, 3)));
+int snprintf(char *buf, size_t sz, const char *fmt, ...)
+    __attribute__((format(printf, 3, 4)));
+int vsprintf(char *buf, const char *fmt, va_list args);
+int vsnprintf(char *buf, size_t sz, const char *fmt, va_list args);
 
 #endif  // __LIB_CJ
 

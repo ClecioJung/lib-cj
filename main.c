@@ -24,14 +24,14 @@
 // SOURCE
 //------------------------------------------------------------------------------
 
-#include <limits.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h> 
-
 #ifdef USE_LIB_CJ
 #include "libcj.h"
 #endif
+
+#include <limits.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 // TODO: Introduce a function to escape special chars
 #define EXPECT_STR(value, to_equal) expect_str(__FILE__, __LINE__, value, to_equal)

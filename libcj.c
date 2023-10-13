@@ -541,7 +541,7 @@ static double next_float_arg(va_list args, enum Length_Modifier modifier)
 
 // TODO: The zero flag is ignored with strings and when precision is specified
 
-static int __snprintf(char **buf, size_t *const sz, const char *fmt, va_list args)
+static int __vsnprintf(char **buf, size_t *const sz, const char *fmt, va_list args)
 {
     enum Fmt_Specifier specifier;
     enum Fmt_Flags flags;
@@ -549,6 +549,9 @@ static int __snprintf(char **buf, size_t *const sz, const char *fmt, va_list arg
     bool uppercase;
     int written = 0;
     const char *cursor = fmt;
+    if (fmt == NULL) {
+        return -1;
+    }
     while (*cursor != '\0') {
         if (*cursor != '%') {
             PUTCHAR(*cursor);
@@ -639,21 +642,33 @@ static int __snprintf(char **buf, size_t *const sz, const char *fmt, va_list arg
     return written;
 }
 
-int snprintf(char *buf, size_t sz, const char *fmt, ...)
+int sprintf(char *buf, const char *fmt, ...)
 {
-    if (fmt == NULL) {
-        return -1;
-    }
     va_list args;
     va_start(args, fmt);
-    int written = __snprintf(&buf, &sz, fmt, args);
+    int written = __vsnprintf(&buf, NULL, fmt, args);
     va_end(args);
     return written;
 }
 
-// TODO: sprintf    Write formatted data to string
-// TODO: vsnprintf  Write formatted data from variable argument list to sized buffer
-// TODO: vsprintf   Write formatted data from variable argument list to string
+int snprintf(char *buf, size_t sz, const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    int written = __vsnprintf(&buf, &sz, fmt, args);
+    va_end(args);
+    return written;
+}
+
+int vsprintf(char *buf, const char *fmt, va_list args)
+{
+    return __vsnprintf(&buf, NULL, fmt, args);
+}
+
+int vsnprintf(char *buf, size_t sz, const char *fmt, va_list args)
+{
+    return __vsnprintf(&buf, &sz, fmt, args);
+}
 
 // https://cplusplus.com/reference/cstdio/scanf/
 // TODO: sscanf     Read formatted data from string
