@@ -72,7 +72,6 @@ void check_strlen(void)
         EXPECT_INT(ret, strlen(expected)); \
     } while (0) \
 
-// TODO: We must have tests for multiple flags!
 void check_snprintf(void)
 {
     TEST_SNPRINTF("Hello World!", "Hello World!");
@@ -149,15 +148,29 @@ void check_snprintf(void)
     TEST_SNPRINTF("Testing flags:      0xa      0xb 0x00000c 0xd          +0xe 0x00000f", "Testing flags: %8p % 8p %08p %-8p %+8p %2.6p", (void*)10, (void*)11, (void*)12, (void*)13, (void*)14, (void*)15);
     TEST_SNPRINTF("Testing flags: +0x0001a 0x1b     0x00001c +0x0001d 0x001e   ", "Testing flags: %+08p %-08p %#08p %+08p %-8.4p ", (void*)26, (void*)27, (void*)28, (void*)29, (void*)30);
     // Decimal floating point
-    TEST_SNPRINTF("392.567800 0.001000 0.10 0.001000", "%f %f %.2f %F", 392.5678, 1e-3, 0.1, 1e-3);
-    // Scientific notation (mantissa/exponent)
+    TEST_SNPRINTF("392.567810 0.001000 0.10 0.001000", "%f %f %.2f %F", 392.5678f, 1e-3f, 0.1f, 1e-3f);
+    TEST_SNPRINTF("Testing flags: 10.000000  1.000000 2.000000 3.000000 +4.000000 16.0000 25.0000", "Testing flags: %4f % 3f %04f %-3f %+2f %5.4f %.4f", 10.0f, 1.0f, 2.0f, 3.0f, 4.0f, 16.0f, 25.0f);
+    TEST_SNPRINTF("Testing flags: 10.000000 +1.000000 -1.000000 2.000000 55.0000 +0.000000", "Testing flags: %04f %+03f %03f %-03f %-05.4f %+f", 10.0f, 1.0f, -1.0f, 2.0f, 55.0f, 0.0f);
+    // Floating point in scientific notation (mantissa/exponent)
     TEST_SNPRINTF("3.925678e+02 1.000000e-03 1.00e-01 1.000000E-03", "%e %e %.2e %E", 392.5678, 1e-3, 0.1, 1e-3);
+    TEST_SNPRINTF("Testing flags: 1.000000e+01  1.000000e+00 2.000000e+00 3.000000e+00 +4.000000e+00 1.6000e+01 2.5000e+01", "Testing flags: %4e % 3e %04e %-3e %+2e %5.4e %.4e", 10.0f, 1.0f, 2.0f, 3.0f, 4.0f, 16.0f, 25.0f);
+    TEST_SNPRINTF("Testing flags: 1.000000e+01 +1.000000e+00 -1.000000e+00 2.000000e+00 5.5000e+01 +0.000000e+00", "Testing flags: %04e %+03e %03e %-03e %-05.4e %+e", 10.0f, 1.0f, -1.0f, 2.0f, 55.0f, 0.0f);
+    TEST_SNPRINTF("Testing flags: 1.000000E+01  1.000000E+00 2.000000E+00 3.000000E+00 +4.000000E+00 1.6000E+01 2.5000E+01", "Testing flags: %4E % 3E %04E %-3E %+2E %5.4E %.4E", 10.0f, 1.0f, 2.0f, 3.0f, 4.0f, 16.0f, 25.0f);
+    TEST_SNPRINTF("Testing flags: 1.000000E+01 +1.000000E+00 -1.000000E+00 2.000000E+00 5.5000E+01 +0.000000E+00", "Testing flags: %04E %+03E %03E %-03E %-05.4E %+E", 10.0f, 1.0f, -1.0f, 2.0f, 55.0f, 0.0f);
     // Hexadecimal floating point
     TEST_SNPRINTF("0x1.88915b573eab3p+8 0x1.b7cdfd9d7bdbbp-34 0x1.9ap-4 0X1.B7CDFD9D7BDBBP-34", "%a %a %.2a %A", 392.5678, 1e-10, 0.1, 1e-10);
-    // Use the shortest representation:
-    // TODO: Add better tests, with negative numbers and double limits
+    TEST_SNPRINTF("Testing flags: 0x1.4p+3  0x1p+0 0x1p+1 0x1.8p+1 +0x1p+2 0x1.0000p+4 0x1.9000p+4", "Testing flags: %4a % 3a %04a %-3a %+2a %5.4a %.4a", 10.0f, 1.0f, 2.0f, 3.0f, 4.0f, 16.0f, 25.0f);
+    TEST_SNPRINTF("Testing flags: 0x1.4p+3 +0x1p+0 -0x1p+0 0x1p+1 0x1.b800p+5 +0x0p+0", "Testing flags: %04a %+03a %03a %-03a %-05.4a %+a", 10.0f, 1.0f, -1.0f, 2.0f, 55.0f, 0.0f);
+    TEST_SNPRINTF("Testing flags: 0X1.4P+3  0X1P+0 0X1P+1 0X1.8P+1 +0X1P+2 0X1.0000P+4 0X1.9000P+4", "Testing flags: %4A % 3A %04A %-3A %+2A %5.4A %.4A", 10.0f, 1.0f, 2.0f, 3.0f, 4.0f, 16.0f, 25.0f);
+    TEST_SNPRINTF("Testing flags: 0X1.4P+3 +0X1P+0 -0X1P+0 0X1P+1 0X1.B800P+5 +0X0P+0", "Testing flags: %04A %+03A %03A %-03A %-05.4A %+A", 10.0f, 1.0f, -1.0f, 2.0f, 55.0f, 0.0f);
+    // Floating point in the shortest representation
     TEST_SNPRINTF("392.568 1e-10 0.1 1E-10", "%g %g %.2g %G", 392.5678, 1e-10, 0.1, 1e-10);
     TEST_SNPRINTF("0.1 0.001 0.00123457 0.000123457 1.23457e-05", "%g %g %g %g %g", 0.1, 1e-3, 1.234567e-3, 1.234567e-4, 1.234567e-5);
+    TEST_SNPRINTF("Testing flags:   10   1 0002 3   +4    16 25", "Testing flags: %4g % 3g %04g %-3g %+2g %5.4g %.4g", 10.0f, 1.0f, 2.0f, 3.0f, 4.0f, 16.0f, 25.0f);
+    TEST_SNPRINTF("Testing flags: 0010 +01 -01 2   55    +0", "Testing flags: %04g %+03g %03g %-03g %-05.4g %+g", 10.0f, 1.0f, -1.0f, 2.0f, 55.0f, 0.0f);
+    TEST_SNPRINTF("Testing flags: 010.1234 +1.23456 -1.23456 2.34568   889.5   ", "Testing flags: %08g %+08g %08g %-09g %-08.4g", 10.1234f, 1.23456f, -1.23456f, 2.345678f, 889.45678f);
+    TEST_SNPRINTF("Testing flags: 1.01234e-05 +1.23456e-06 -1.23456e-06 2.34568e+06 8.895e+05", "Testing flags: %08g %+08g %08g %-09g %-08.4g", 10.1234e-6f, 1.23456e-6f, -1.23456e-6f, 2.345678e+6f, 889.45678e+3f);
+    TEST_SNPRINTF("Testing flags: 1.01234E-05 +1.23456E-06 -1.23456E-06 2.34568E+06 8.895E+05", "Testing flags: %08G %+08G %08G %-09G %-08.4G", 10.1234e-6f, 1.23456e-6f, -1.23456e-6f, 2.345678e+6f, 889.45678e+3f);
     // String of characters
     TEST_SNPRINTF("Some null string of chars: (null)", "Some null %s of chars: %s", "string", (char *)NULL);
     TEST_SNPRINTF("   foo bar baz test   char", "%6s %.6s %.3s %-6s %.*s", "foo", "bar", "bazzing", "test", 4, "character");

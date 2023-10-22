@@ -151,8 +151,9 @@ static int str_to_int(
         } else {
             break;
         }
+        // TODO: I believe that still could happen an overflow
         if (number <= LONG_MAX / base) {
-            number = base * (number) + digit;
+            number = base * number + digit;
         } else {
             // Overflow detected
             // In this case we return the maximum positive number that a long int can store
@@ -283,6 +284,9 @@ static long div_remainder(const double dividend, const double divisor, const boo
 static long int float_exponent_form(double *const value, const unsigned int base)
 {
     long int exponent = 0;
+    if (*value == 0.0) {
+        return 0;
+    }
     if ((int)(*value/base) > 0) {
         while ((int)(*value/base) > 0) {
             *value = scale_radix_exp(*value, base, -1);
@@ -316,40 +320,58 @@ float_to_str(
     const double value          // Float value to be converted to string
 )
 {
-    char str[32];
-    (void)width;
-    (void)flags;
-    //const bool pad_with_zeros = flags & Flag_Zero;
-    //const bool left_justify = flags & Flag_Minus;
-    //const bool must_add_sign = flags & Flag_Plus;
+    char str[32]; // TODO: Check for boundaries
     const bool negative = value < 0.0;
+    const bool left_justify = flags & Flag_Minus;
+    const bool include_sign = negative || (flags & Flag_Plus);
+    const bool right_fill_with_zeros = ((base != 16) || precision > 0) && (!short_form);
+    const unsigned int base_padding = (base == 16) ? 2 : 0;
+    const int left_padding = (int)(include_sign ? (base_padding+1) : base_padding);
+    // Flag_Zero is ignored if Flag_Minus is informed
+    const int zeros = (short_form && !(flags & Flag_Minus) && (flags & Flag_Zero)) ? (width-left_padding) : 0;
     double x = negative ? (-value) : value;
     int written = 0;
     long int exponent = 0;
     const double original_x = x;
+    if (precision < 0) { // Default precision
+        precision = (base == 16) ? 13 : 6;
+    }
     if (exponent_form | short_form) {
         exponent = float_exponent_form(&x, base == 16 ? 2 : base);
     }
     if (short_form) {
         exponent_form = (ABS(exponent) >= 5);
-        if (precision < 0) {
-            precision = exponent_form ? 5 : (int)(5L - exponent);
-        }
+        precision = exponent_form ? (precision - 1) : (int)(precision - 1 - exponent);
         if (!exponent_form) {
             x = original_x;
         }
     }
-    if (precision < 0) { // Default precision
-        precision = (base == 16) ? 13 : 6;
+    if (exponent_form) {
+        const int exponent_base = 10;
+        const int exponent_length = (base == 10) ? 2 : 1;
+        const bool exponent_negative = exponent < 0;
+        exponent = exponent_negative ? (-exponent) : exponent;
+        while ((exponent > 0) || (written < exponent_length)) {
+            str[written++] = VALUE_TO_CHAR((char)(exponent % exponent_base), uppercase);
+            exponent /= exponent_base;
+        }
+        str[written++] = exponent_negative ? '-' : '+';
+        if (base == 16) {
+            str[written++] = uppercase ? 'P' : 'p';
+        } else {
+            str[written++] = uppercase ? 'E' : 'e';
+        }
     }
+    bool has_decimal_chars = false;
     for (int exp = precision; exp > 0; exp--) {
         const double y = scale_radix_exp(x, base, exp);
         const char c = (char)div_remainder(y, base, exp == precision);
-        if ((!short_form) || (c != 0) || (written != 0)) {
+        if (right_fill_with_zeros || has_decimal_chars || (c != 0)) {
             str[written++] = VALUE_TO_CHAR(c, uppercase);
+            has_decimal_chars = true;
         }
     }
-    if ((!short_form) || (written > 0)) {
+    if (has_decimal_chars) {
         str[written++] = '.';
     }
     char c = (char)div_remainder(x, base, false);
@@ -358,20 +380,32 @@ float_to_str(
         x = scale_radix_exp(x, base, -1);
         c = (char)div_remainder(x, base, false);
     } while (c > 0);
-    if (negative) {
-        str[written++] = '-';
+    while (written < zeros) {
+        str[written++] = '0';
+    }
+    if (base_padding) {
+        str[written++] = uppercase ? 'X' : 'x';
+        str[written++] = '0';
+    }
+    if (include_sign) {
+        str[written++] = negative ? '-' : '+';
+    }
+    if (flags & Flag_Space) {
+        str[written++] = ' ';
+    }
+    if (!left_justify && short_form) {
+        while (written < width) {
+            str[written++] = ' ';
+        }
     }
     for (int index = written; index > 0; index--) {
         PUTCHAR(str[index-1]);
     }
-    if (exponent_form) {
-        if (base == 16) {
-            PUTCHAR(uppercase ? 'P' : 'p');
-        } else {
-            PUTCHAR(uppercase ? 'E' : 'e');
+    if (left_justify && short_form) {
+        while (written < width) {
+            PUTCHAR(' ');
+            written++;
         }
-        written++;
-        written += int_to_str(buf, sz, -1, ((base == 10) ? 2 : 1), Flag_Plus, uppercase, 10, true, exponent);
     }
     // This function doesn't need to introduce null termination to the buffer
     // This is responsability of its caller
@@ -611,9 +645,6 @@ static int __vsnprintf(char **buf, size_t *const sz, const char *fmt, va_list ar
                 written += float_to_str(buf, sz, (int)width, (int)precision, flags, false, true, uppercase, 10, next_float_arg(args, modifier));
                 break;
             case Fmt_a: // Decimal floating point in hexadecimal form
-                PUTCHAR('0');
-                PUTCHAR(uppercase ? 'X' : 'x');
-                written += 2;
                 written += float_to_str(buf, sz, (int)width, (int)precision, flags, true, false, uppercase, 16, next_float_arg(args, modifier));
                 break;
             case Fmt_c: // Character
@@ -654,7 +685,7 @@ int sprintf(char *buf, const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
-    int written = __vsnprintf(&buf, NULL, fmt, args);
+    const int written = __vsnprintf(&buf, NULL, fmt, args);
     va_end(args);
     return written;
 }
@@ -663,7 +694,7 @@ int snprintf(char *buf, size_t sz, const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
-    int written = __vsnprintf(&buf, &sz, fmt, args);
+    const int written = __vsnprintf(&buf, &sz, fmt, args);
     va_end(args);
     return written;
 }
@@ -676,6 +707,30 @@ int vsprintf(char *buf, const char *fmt, va_list args)
 int vsnprintf(char *buf, size_t sz, const char *fmt, va_list args)
 {
     return __vsnprintf(&buf, &sz, fmt, args);
+}
+
+#if defined(__cplusplus) && (__cplusplus >= 201103L)
+#define THREAD_LOCAL thread_local
+#elif defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)
+#define THREAD_LOCAL _Thread_local
+#elif defined(_MSC_VER)
+#define THREAD_LOCAL __declspec(thread)
+#elif defined(__GNUC__) || defined(__clang__) || defined(__MINGW32__)
+#define THREAD_LOCAL __thread
+#else
+#error "No support for thread-local storage."
+#endif
+
+char *tprint(char *fmt, ...) {
+    static THREAD_LOCAL char buffer[4096];
+    va_list args;
+    va_start(args, fmt);
+    const int written = vsnprintf(buffer, sizeof(buffer), fmt, args);
+    va_end(args);
+    if (written >= 0) {
+        return buffer;
+    }
+    return NULL;
 }
 
 // https://cplusplus.com/reference/cstdio/scanf/

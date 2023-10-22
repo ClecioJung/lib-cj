@@ -42,6 +42,8 @@ int snprintf(char *buf, size_t sz, const char *fmt, ...)
     __attribute__((format(printf, 3, 4)));
 int vsprintf(char *buf, const char *fmt, va_list args);
 int vsnprintf(char *buf, size_t sz, const char *fmt, va_list args);
+char *tprint(char *fmt, ...)
+    __attribute__((format(printf, 1, 2)));
 
 #endif  // __LIB_CJ
 
