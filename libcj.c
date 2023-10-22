@@ -269,14 +269,10 @@ static double scale_radix_exp(double x, const unsigned int radix, int exponent) 
     return x;
 }
 
-static long div_remainder(const double dividend, const double divisor, const bool round_up)
+static long div_remainder(const double dividend, const double divisor)
 {
     const long quotient = (long)(dividend / divisor);
     const double remainder = dividend - (divisor * (double)quotient);
-    // TODO: The rest of the code is ugly. But this is simply disgusting!!!
-    if (round_up && (div_remainder(remainder*divisor, divisor, false) >= divisor/2)) {
-        return (long)(remainder+1);
-    }
     return (long)remainder;
 }
 
@@ -299,6 +295,17 @@ static long int float_exponent_form(double *const value, const unsigned int base
         }
     }
     return exponent;
+}
+
+static double rounding(const double value, const unsigned int base, const int decimal_places)
+{
+    const double y = scale_radix_exp(value, base, decimal_places);
+    const double remainder = y - (long)y;
+    if (remainder >= 0.5) {
+        const double value_to_add = scale_radix_exp((1.0), base, -decimal_places);
+        return (value + value_to_add);
+    }
+    return value;
 }
 
 #define ABS(x)  (((x) >= 0) ? (x) : -(x))
@@ -363,9 +370,10 @@ float_to_str(
         }
     }
     bool has_decimal_chars = false;
+    x = rounding(x, base, precision);
     for (int exp = precision; exp > 0; exp--) {
         const double y = scale_radix_exp(x, base, exp);
-        const char c = (char)div_remainder(y, base, exp == precision);
+        char c = (char)div_remainder(y, base);
         if (right_fill_with_zeros || has_decimal_chars || (c != 0)) {
             str[written++] = VALUE_TO_CHAR(c, uppercase);
             has_decimal_chars = true;
@@ -374,11 +382,11 @@ float_to_str(
     if (has_decimal_chars) {
         str[written++] = '.';
     }
-    char c = (char)div_remainder(x, base, false);
+    char c = (char)div_remainder(x, base);
     do {
         str[written++] = VALUE_TO_CHAR(c, uppercase);
         x = scale_radix_exp(x, base, -1);
-        c = (char)div_remainder(x, base, false);
+        c = (char)div_remainder(x, base);
     } while (c > 0);
     while (written < zeros) {
         str[written++] = '0';
@@ -475,7 +483,6 @@ static int parse_fmt_flags(
 
 // TODO: scanf does not have precision
 // TODO: scanf has a special "flag" asterisk
-// TODO: In printf, the width can be replaced by asterisk instead of using numbers
 static int parse_fmt_specifier(
     const char *const fmt,
     enum Fmt_Specifier *const specifier,
@@ -607,6 +614,7 @@ static int __vsnprintf(char **buf, size_t *const sz, const char *fmt, va_list ar
             parsed_chars += str_to_int((cursor+parsed_chars), 10, &width);
             if (*(cursor+parsed_chars) == '.') {
                 parsed_chars++;
+                // The width can be replaced by asterisk instead of using numbers
                 if (*(cursor+parsed_chars) == '*') {
                     parsed_chars++;
                     precision = va_arg(args, int);

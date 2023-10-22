@@ -157,12 +157,16 @@ void check_snprintf(void)
     TEST_SNPRINTF("Testing flags: 1.000000e+01 +1.000000e+00 -1.000000e+00 2.000000e+00 5.5000e+01 +0.000000e+00", "Testing flags: %04e %+03e %03e %-03e %-05.4e %+e", 10.0f, 1.0f, -1.0f, 2.0f, 55.0f, 0.0f);
     TEST_SNPRINTF("Testing flags: 1.000000E+01  1.000000E+00 2.000000E+00 3.000000E+00 +4.000000E+00 1.6000E+01 2.5000E+01", "Testing flags: %4E % 3E %04E %-3E %+2E %5.4E %.4E", 10.0f, 1.0f, 2.0f, 3.0f, 4.0f, 16.0f, 25.0f);
     TEST_SNPRINTF("Testing flags: 1.000000E+01 +1.000000E+00 -1.000000E+00 2.000000E+00 5.5000E+01 +0.000000E+00", "Testing flags: %04E %+03E %03E %-03E %-05.4E %+E", 10.0f, 1.0f, -1.0f, 2.0f, 55.0f, 0.0f);
+    TEST_SNPRINTF("Testing flags: 1.012340e-05 +1.234560e-06 -1.234560e-06 2.345678e+06 8.8946e+05", "Testing flags: %08e %+08e %08e %-09e %-08.4e", 10.1234e-6f, 1.23456e-6f, -1.23456e-6f, 2.345678e+6f, 889.45678e+3f);
+    TEST_SNPRINTF("Testing flags: 1.012340E-05 +1.234560E-06 -1.234560E-06 2.345678E+06 8.8946E+05", "Testing flags: %08E %+08E %08E %-09E %-08.4E", 10.1234e-6f, 1.23456e-6f, -1.23456e-6f, 2.345678e+6f, 889.45678e+3f);
     // Hexadecimal floating point
     TEST_SNPRINTF("0x1.88915b573eab3p+8 0x1.b7cdfd9d7bdbbp-34 0x1.9ap-4 0X1.B7CDFD9D7BDBBP-34", "%a %a %.2a %A", 392.5678, 1e-10, 0.1, 1e-10);
     TEST_SNPRINTF("Testing flags: 0x1.4p+3  0x1p+0 0x1p+1 0x1.8p+1 +0x1p+2 0x1.0000p+4 0x1.9000p+4", "Testing flags: %4a % 3a %04a %-3a %+2a %5.4a %.4a", 10.0f, 1.0f, 2.0f, 3.0f, 4.0f, 16.0f, 25.0f);
     TEST_SNPRINTF("Testing flags: 0x1.4p+3 +0x1p+0 -0x1p+0 0x1p+1 0x1.b800p+5 +0x0p+0", "Testing flags: %04a %+03a %03a %-03a %-05.4a %+a", 10.0f, 1.0f, -1.0f, 2.0f, 55.0f, 0.0f);
     TEST_SNPRINTF("Testing flags: 0X1.4P+3  0X1P+0 0X1P+1 0X1.8P+1 +0X1P+2 0X1.0000P+4 0X1.9000P+4", "Testing flags: %4A % 3A %04A %-3A %+2A %5.4A %.4A", 10.0f, 1.0f, 2.0f, 3.0f, 4.0f, 16.0f, 25.0f);
     TEST_SNPRINTF("Testing flags: 0X1.4P+3 +0X1P+0 -0X1P+0 0X1P+1 0X1.B800P+5 +0X0P+0", "Testing flags: %04A %+03A %03A %-03A %-05.4A %+A", 10.0f, 1.0f, -1.0f, 2.0f, 55.0f, 0.0f);
+    TEST_SNPRINTF("Testing flags: 0x1.53af58p-17 +0x1.4b6652p-20 -0x1.4b6652p-20 0x1.1e567p+21 0x1.b24ep+19", "Testing flags: %08a %+08a %08a %-09a %-08.4a", 10.1234e-6f, 1.23456e-6f, -1.23456e-6f, 2.345678e+6f, 889.45678e+3f);
+    TEST_SNPRINTF("Testing flags: 0X1.53AF58P-17 +0X1.4B6652P-20 -0X1.4B6652P-20 0X1.1E567P+21 0X1.B24EP+19", "Testing flags: %08A %+08A %08A %-09A %-08.4A", 10.1234e-6f, 1.23456e-6f, -1.23456e-6f, 2.345678e+6f, 889.45678e+3f);
     // Floating point in the shortest representation
     TEST_SNPRINTF("392.568 1e-10 0.1 1E-10", "%g %g %.2g %G", 392.5678, 1e-10, 0.1, 1e-10);
     TEST_SNPRINTF("0.1 0.001 0.00123457 0.000123457 1.23457e-05", "%g %g %g %g %g", 0.1, 1e-3, 1.234567e-3, 1.234567e-4, 1.234567e-5);
