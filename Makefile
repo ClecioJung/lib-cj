@@ -11,7 +11,8 @@ CFLAGS := -W -Wall -Wextra -pedantic \
           -flto -std=c11
 
 # List of functions linked from libcj or libc
-FUNCTIONS := strlen \
+FUNCTIONS := tolower toupper \
+             strlen \
              snprintf
 
 # Function that uses nm to check if a function name (2nd argument) is undefined in a object file (1st argument)

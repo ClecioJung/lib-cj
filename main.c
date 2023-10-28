@@ -26,8 +26,10 @@
 
 #ifdef USE_LIB_CJ
 #include "libcj.h"
-#endif
+#else // USE_LIB_CJ
+#endif // USE_LIB_CJ
 
+#include <ctype.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -35,7 +37,7 @@
 
 // TODO: Introduce a function to escape special chars
 #define EXPECT_STR(value, to_equal) expect_str(__FILE__, __LINE__, value, to_equal)
-void expect_str(const char *const file, const unsigned int line, const char *const value, const char *const to_equal)
+static void expect_str(const char *const file, const unsigned int line, const char *const value, const char *const to_equal)
 {
     if (strcmp(value, to_equal) != 0) {
         fprintf(stderr, "%s:%u [TEST FAILED] expected\n    \"%s\"\n  but got\n    \"%s\"\n", file, line, to_equal, value);
@@ -44,7 +46,7 @@ void expect_str(const char *const file, const unsigned int line, const char *con
 }
 
 #define EXPECT_INT(value, to_equal) expect_int(__FILE__, __LINE__, value, to_equal)
-void expect_int(const char *const file, const unsigned int line, const int value, const int to_equal)
+static void expect_int(const char *const file, const unsigned int line, const int value, const int to_equal)
 {
     if (value != to_equal) {
         fprintf(stderr, "%s:%u [TEST FAILED] expected\n    %d\n  but got\n    %d\n", file, line, to_equal, value);
@@ -52,7 +54,25 @@ void expect_int(const char *const file, const unsigned int line, const int value
     }
 }
 
-void check_strlen(void)
+#define EXPECT_TRUE(value) expect_true(__FILE__, __LINE__, value)
+static void expect_true(const char *const file, const unsigned int line, const int value)
+{
+    if (value == 0) {
+        fprintf(stderr, "%s:%u [TEST FAILED] expected true but got\n    %d\n", file, line, value);
+        exit(EXIT_FAILURE);
+    }
+}
+
+#define EXPECT_FALSE(value) expect_false(__FILE__, __LINE__, value)
+static void expect_false(const char *const file, const unsigned int line, const int value)
+{
+    if (value != 0) {
+        fprintf(stderr, "%s:%u [TEST FAILED] expected false but got\n    %d\n", file, line, value);
+        exit(EXIT_FAILURE);
+    }
+}
+
+static void check_strlen(void)
 {
     const char *const empty_str = "";
     const char *const hello_world = "Hello World!";
@@ -72,7 +92,7 @@ void check_strlen(void)
         EXPECT_INT(ret, strlen(expected)); \
     } while (0) \
 
-void check_snprintf(void)
+static void check_snprintf(void)
 {
     TEST_SNPRINTF("Hello World!", "Hello World!");
     {
@@ -213,10 +233,204 @@ void check_snprintf(void)
     }
 }
 
-int main(void)
+// Test all the code classification functions defined in ctype.h
+// Actually, in my libc, this functions are defined as macros
+static void check_code_fns(void)
+{
+    // Check all of the ASCII characters
+    for (int c = 0x0; c <= 0x7F; c++) {
+        if (((0x00 <= c) && (c <= 0x08)) || ((0x0E <= c) && (c <= 0x1F)) || (c == 0x7F)) {
+            EXPECT_TRUE(iscntrl(c));
+            EXPECT_FALSE(isblank(c));
+            EXPECT_FALSE(isspace(c));
+            EXPECT_FALSE(isupper(c));
+            EXPECT_FALSE(islower(c));
+            EXPECT_FALSE(isalpha(c));
+            EXPECT_FALSE(isdigit(c));
+            EXPECT_FALSE(isxdigit(c));
+            EXPECT_FALSE(isalnum(c));
+            EXPECT_FALSE(ispunct(c));
+            EXPECT_FALSE(isgraph(c));
+            EXPECT_FALSE(isprint(c));
+        } else if (c == 0x09) { // Tab: '\t'
+            EXPECT_TRUE(iscntrl(c));
+            EXPECT_TRUE(isblank(c));
+            EXPECT_TRUE(isspace(c));
+            EXPECT_FALSE(isupper(c));
+            EXPECT_FALSE(islower(c));
+            EXPECT_FALSE(isalpha(c));
+            EXPECT_FALSE(isdigit(c));
+            EXPECT_FALSE(isxdigit(c));
+            EXPECT_FALSE(isalnum(c));
+            EXPECT_FALSE(ispunct(c));
+            EXPECT_FALSE(isgraph(c));
+            EXPECT_FALSE(isprint(c));
+        } else if ((0x0A <= c) && (c <= 0x0D)) { // white-space control codes: '\f','\v','\n','\r'
+            EXPECT_TRUE(iscntrl(c));
+            EXPECT_FALSE(isblank(c));
+            EXPECT_TRUE(isspace(c));
+            EXPECT_FALSE(isupper(c));
+            EXPECT_FALSE(islower(c));
+            EXPECT_FALSE(isalpha(c));
+            EXPECT_FALSE(isdigit(c));
+            EXPECT_FALSE(isxdigit(c));
+            EXPECT_FALSE(isalnum(c));
+            EXPECT_FALSE(ispunct(c));
+            EXPECT_FALSE(isgraph(c));
+            EXPECT_FALSE(isprint(c));
+        } else if (c == 0x20) { // Space: ' '
+            EXPECT_FALSE(iscntrl(c));
+            EXPECT_TRUE(isblank(c));
+            EXPECT_TRUE(isspace(c));
+            EXPECT_FALSE(isupper(c));
+            EXPECT_FALSE(islower(c));
+            EXPECT_FALSE(isalpha(c));
+            EXPECT_FALSE(isdigit(c));
+            EXPECT_FALSE(isxdigit(c));
+            EXPECT_FALSE(isalnum(c));
+            EXPECT_FALSE(ispunct(c));
+            EXPECT_FALSE(isgraph(c));
+            EXPECT_TRUE(isprint(c));
+        } else if ((0x21 <= c) && (c <= 0x2F)) { // !"#$%&'()*+,-./
+            EXPECT_FALSE(iscntrl(c));
+            EXPECT_FALSE(isblank(c));
+            EXPECT_FALSE(isspace(c));
+            EXPECT_FALSE(isupper(c));
+            EXPECT_FALSE(islower(c));
+            EXPECT_FALSE(isalpha(c));
+            EXPECT_FALSE(isdigit(c));
+            EXPECT_FALSE(isxdigit(c));
+            EXPECT_FALSE(isalnum(c));
+            EXPECT_TRUE(ispunct(c));
+            EXPECT_TRUE(isgraph(c));
+            EXPECT_TRUE(isprint(c));
+        } else if ((0x30 <= c) && (c <= 0x39)) { // 0123456789
+            EXPECT_FALSE(iscntrl(c));
+            EXPECT_FALSE(isblank(c));
+            EXPECT_FALSE(isspace(c));
+            EXPECT_FALSE(isupper(c));
+            EXPECT_FALSE(islower(c));
+            EXPECT_FALSE(isalpha(c));
+            EXPECT_TRUE(isdigit(c));
+            EXPECT_TRUE(isxdigit(c));
+            EXPECT_TRUE(isalnum(c));
+            EXPECT_FALSE(ispunct(c));
+            EXPECT_TRUE(isgraph(c));
+            EXPECT_TRUE(isprint(c));
+        } else if (
+            ((0x3A <= c) && (c <= 0x40)) || // :;<=>?@
+            ((0x5B <= c) && (c <= 0x60)) || // [\]^_`
+            ((0x7B <= c) && (c <= 0x7E))) { // {|}~
+            EXPECT_FALSE(iscntrl(c));
+            EXPECT_FALSE(isblank(c));
+            EXPECT_FALSE(isspace(c));
+            EXPECT_FALSE(isupper(c));
+            EXPECT_FALSE(islower(c));
+            EXPECT_FALSE(isalpha(c));
+            EXPECT_FALSE(isdigit(c));
+            EXPECT_FALSE(isxdigit(c));
+            EXPECT_FALSE(isalnum(c));
+            EXPECT_TRUE(ispunct(c));
+            EXPECT_TRUE(isgraph(c));
+            EXPECT_TRUE(isprint(c));
+        } else if ((0x41 <= c) && (c <= 0x46)) { // ABCDEF
+            EXPECT_FALSE(iscntrl(c));
+            EXPECT_FALSE(isblank(c));
+            EXPECT_FALSE(isspace(c));
+            EXPECT_TRUE(isupper(c));
+            EXPECT_FALSE(islower(c));
+            EXPECT_TRUE(isalpha(c));
+            EXPECT_FALSE(isdigit(c));
+            EXPECT_TRUE(isxdigit(c));
+            EXPECT_TRUE(isalnum(c));
+            EXPECT_FALSE(ispunct(c));
+            EXPECT_TRUE(isgraph(c));
+            EXPECT_TRUE(isprint(c));
+        } else if ((0x47 <= c) && (c <= 0x5A)) { // GHIJKLMNOPQRSTUVWXYZ
+            EXPECT_FALSE(iscntrl(c));
+            EXPECT_FALSE(isblank(c));
+            EXPECT_FALSE(isspace(c));
+            EXPECT_TRUE(isupper(c));
+            EXPECT_FALSE(islower(c));
+            EXPECT_TRUE(isalpha(c));
+            EXPECT_FALSE(isdigit(c));
+            EXPECT_FALSE(isxdigit(c));
+            EXPECT_TRUE(isalnum(c));
+            EXPECT_FALSE(ispunct(c));
+            EXPECT_TRUE(isgraph(c));
+            EXPECT_TRUE(isprint(c));
+        } else if ((0x61 <= c) && (c <= 0x66)) { // abcdef
+            EXPECT_FALSE(iscntrl(c));
+            EXPECT_FALSE(isblank(c));
+            EXPECT_FALSE(isspace(c));
+            EXPECT_FALSE(isupper(c));
+            EXPECT_TRUE(islower(c));
+            EXPECT_TRUE(isalpha(c));
+            EXPECT_FALSE(isdigit(c));
+            EXPECT_TRUE(isxdigit(c));
+            EXPECT_TRUE(isalnum(c));
+            EXPECT_FALSE(ispunct(c));
+            EXPECT_TRUE(isgraph(c));
+            EXPECT_TRUE(isprint(c));
+        } else if ((0x67 <= c) && (c <= 0x7A)) { // ghijklmnopqrstuvwxyz
+            EXPECT_FALSE(iscntrl(c));
+            EXPECT_FALSE(isblank(c));
+            EXPECT_FALSE(isspace(c));
+            EXPECT_FALSE(isupper(c));
+            EXPECT_TRUE(islower(c));
+            EXPECT_TRUE(isalpha(c));
+            EXPECT_FALSE(isdigit(c));
+            EXPECT_FALSE(isxdigit(c));
+            EXPECT_TRUE(isalnum(c));
+            EXPECT_FALSE(ispunct(c));
+            EXPECT_TRUE(isgraph(c));
+            EXPECT_TRUE(isprint(c));
+        } else {
+            fprintf(stderr, "%s:%u [TEST FAILED] unhandled character '%c' (%#x) in %s\n", __FILE__, __LINE__, c, c, __func__);
+            exit(EXIT_FAILURE);
+        }
+    }
+}
+
+void check_conversion_fns(void)
+{
+    // tolower
+    EXPECT_INT(tolower(' '), ' ');
+    EXPECT_INT(tolower('0'), '0');
+    EXPECT_INT(tolower('a'), 'a');
+    EXPECT_INT(tolower('A'), 'a');
+    EXPECT_INT(tolower('z'), 'z');
+    EXPECT_INT(tolower('Z'), 'z');
+    // toupper
+    EXPECT_INT(toupper(' '), ' ');
+    EXPECT_INT(toupper('0'), '0');
+    EXPECT_INT(toupper('a'), 'A');
+    EXPECT_INT(toupper('A'), 'A');
+    EXPECT_INT(toupper('z'), 'Z');
+    EXPECT_INT(toupper('Z'), 'Z');
+}
+
+static void check_ctype(void)
+{
+    check_code_fns();
+    check_conversion_fns();
+}
+
+static void check_string(void)
 {
     check_strlen();
+}
+
+static void check_stdlib(void)
+{
     check_snprintf();
+}
+
+int main(void)
+{
+    check_ctype();
+    check_string();
+    check_stdlib();
     return EXIT_SUCCESS;
 }
 

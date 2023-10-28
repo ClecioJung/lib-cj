@@ -24,7 +24,6 @@
 // SOURCE
 //------------------------------------------------------------------------------
 
-#include <ctype.h> // TODO: Remove this dependency
 #include <float.h>
 #include <limits.h>
 #include <math.h>
@@ -645,20 +644,101 @@ char *tprint(char *fmt, ...) {
 // CTYPE.H
 //------------------------------------------------------------------------------
 
-// TODO: isalnum    Check if character is alphanumeric
-// TODO: isalpha    Check if character is alphabetic
-// TODO: isblank    Check if character is blank
-// TODO: iscntrl    Check if character is a control character
-// TODO: isdigit    Check if character is decimal digit
-// TODO: isgraph    Check if character has graphical representation
-// TODO: islower    Check if character is lowercase letter
-// TODO: isprint    Check if character is printable
-// TODO: ispunct    Check if character is a punctuation character
-// TODO: isspace    Check if character is a white-space
-// TODO: isupper    Check if character is uppercase letter
-// TODO: isxdigit   Check if character is hexadecimal digit
-// TODO: tolower    Convert uppercase letter to lowercase
-// TODO: toupper    Convert lowercase letter to uppercase
+// Check if character is alphanumeric
+int isalnum(int c)
+{
+    return ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || ('0' <= c && c <= '9');
+}
+
+// Check if character is alphabetic
+int isalpha(int c)
+{
+    return ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z');
+}
+
+// Check if character is blank
+int isblank(int c)
+{
+    return c == ' ' || c == '\t';
+}
+
+// Check if character is a control character
+int iscntrl(int c)
+{
+    // Control characters are those between ASCII codes 0x00 (NUL) and 0x1f (US), plus 0x7f (DEL).
+    return (0x0 <= c && c <= 0x1f) || (c == 0x7f);
+}
+
+// Check if character is decimal digit
+int isdigit(int c)
+{
+    return '0' <= c && c <= '9';
+}
+
+// Check if character has graphical representation
+int isgraph(int c)
+{
+    // The characters with graphical representation are all those characters than can be printed
+    // (as determined by isprint) except the space character (' ')
+    return (c > 0x1f) && (c != 0x7f) && (c != ' ');
+}
+
+// Check if character is lowercase letter
+int islower(int c)
+{
+    return ('a' <= c && c <= 'z');
+}
+
+// Check if character is printable
+int isprint(int c)
+{
+    // Printing characters are all with an ASCII code greater than 0x1f (US), except 0x7f (DEL)
+    return (c > 0x1f) && (c != 0x7f);
+}
+
+// Check if character is a punctuation character
+int ispunct(int c)
+{
+    // Punctuation characters are all graphic characters (as in isgraph) that are not alphanumeric (as in isalnum).
+    return isgraph(c) && !isalnum(c);
+}
+
+// Check if character is a white-space
+int isspace(int c)
+{
+    return (c == ' ') || (c == '\t') || (c == '\n') || (c == '\v') || (c == '\f') || (c == '\r');
+}
+
+// Check if character is uppercase letter
+int isupper(int c)
+{
+    return ('A' <= c && c <= 'Z');
+}
+
+// Check if character is hexadecimal digit
+int isxdigit(int c)
+{
+    return ('a' <= c && c <= 'f') || ('A' <= c && c <= 'F') || ('0' <= c && c <= '9');
+}
+
+// Convert uppercase letter to lowercase
+int tolower(int c)
+{
+    if ('A' <= c && c <= 'Z') {
+        return (c+'a'-'A');
+    }
+    return c;
+}
+
+// Convert lowercase letter to uppercase
+int toupper(int c)
+{
+    if ('a' <= c && c <= 'z') {
+        return (c+'A'-'a');
+    }
+    return c;
+}
+
 
 //------------------------------------------------------------------------------
 // STRING.H
