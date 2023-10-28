@@ -107,7 +107,10 @@ enum Fmt_Flags {
     Flag_Plus  = 0x02,
     Flag_Space = 0x04,
     Flag_Hash  = 0x08,
-    Flag_Zero  = 0x10
+    Flag_Zero  = 0x10,
+    Flag_Upper = 0x20,
+    Flag_Exp   = 0x40, // Float number exponential form
+    Flag_Short = 0x80, // Float number short form
 };
 
 // Parses a integer number using base 8, 10 or 16
@@ -125,7 +128,7 @@ LIBCJ_FN int str_to_int(const char *fmt, const int base, int *const value)
         } else {
             break;
         }
-        // TODO: I believe that still could happen an overflow - test with this number: 0x17ffffff
+        // TODO: I believe that still could happen an overflow
         if (number <= INT_MAX / base) {
             number = base * number + digit;
         } else {
@@ -141,26 +144,19 @@ LIBCJ_FN int str_to_int(const char *fmt, const int base, int *const value)
     return index;
 }
 
-LIBCJ_FN int                      // Return the amount of characters that would have been written if we had enough size
-int_to_str(
-    char **buf,                 // Buffer in which we must write the output string
-    size_t *const sz,           // Size of the buffer
-    const int width,
-    const int precision,
-    const enum Fmt_Flags flags,
-    const bool uppercase,       // The hexadecimal characters should be in upper case?
-    const unsigned int base,    // Integer base (8, 10 or 16)
-    const bool sign,            // The integer value informed is signed?
-    const intmax_t value        // Integer value to be converted to string
-)
+// Return the amount of characters that would have been written if we had enough size
+LIBCJ_FN int int_to_str(char **buf, size_t *const sz,
+    const int width, const int precision, const enum Fmt_Flags flags, const int base,
+    const bool sign, const intmax_t value)
 {
     char str[LOCAL_BUFFER_SIZE]; 
     const bool left_justify = flags & Flag_Minus;
     const bool negative = sign && (value < 0);
+    const bool uppercase = (flags & Flag_Upper) != 0;
     // Pointers are the only unsigned integer that can have the plus sign
     // We detect this condition by checking both flags Flag_Plus and Flag_Hash
     const bool include_sign = negative || ((flags & Flag_Plus) && (sign || (flags & Flag_Hash)));
-    const unsigned int base_padding = ((flags & Flag_Hash) && (base != 10) && (value != 0)) ? (base / 8) : 0;
+    const int base_padding = ((flags & Flag_Hash) && (base != 10) && (value != 0)) ? (base / 8) : 0;
     // Padding using for sign and base specifiers
     const int left_padding = (int)(include_sign ? (base_padding+1) : base_padding);
     const bool use_precision = (precision >= 0) || (flags & Flag_Minus);
@@ -169,8 +165,8 @@ int_to_str(
     uintmax_t x = (uintmax_t)(negative ? (-value) : value);
     int written = 0;
     do {
-        str[written++] = VALUE_TO_CHAR((char)(x % base), uppercase);
-        x /= base;
+        str[written++] = VALUE_TO_CHAR((char)(x % (unsigned int)base), uppercase);
+        x /= (unsigned int)base;
     } while (x > 0);
     while (written < zeros) {
         str[written++] = '0';
@@ -207,7 +203,7 @@ int_to_str(
 }
 
 // Computes x * base^exponent
-LIBCJ_FN double scale_radix_exp(double x, const unsigned int radix, int exponent) {
+LIBCJ_FN double scale_radix_exp(double x, const int radix, int exponent) {
     if (x == 0.0) {
         return x;
     }
@@ -236,7 +232,7 @@ LIBCJ_FN long div_remainder(const double dividend, const double divisor)
 }
 
 // value must be positive
-LIBCJ_FN long int float_exponent_form(double *const value, const unsigned int base)
+LIBCJ_FN long int float_exponent_form(double *const value, const int base)
 {
     long int exponent = 0;
     if (*value == 0.0) {
@@ -256,7 +252,7 @@ LIBCJ_FN long int float_exponent_form(double *const value, const unsigned int ba
     return exponent;
 }
 
-LIBCJ_FN double rounding(const double value, const unsigned int base, const int decimal_places)
+LIBCJ_FN double rounding(const double value, const int base, const int decimal_places)
 {
     const double y = scale_radix_exp(value, base, decimal_places);
     const double remainder = y - (long)y;
@@ -268,46 +264,40 @@ LIBCJ_FN double rounding(const double value, const unsigned int base, const int 
 }
 
 // Return the amount of characters that would have been written if we had enough size
-LIBCJ_FN int float_to_str(
-    char **buf,                 // Buffer in which we must write the output string
-    size_t *const sz,           // Size of the buffer
-    const int width,
-    int precision,
-    const enum Fmt_Flags flags,
-    bool exponent_form,         // Use exponent form?
-    const bool short_form,      // Use short form?
-    const bool uppercase,       // The hexadecimal characters should be in upper case?
-    const unsigned int base,    // Integer base (10 or 16)
-    const double value          // Float value to be converted to string
-)
+LIBCJ_FN int float_to_str(char **buf, size_t *const sz,
+    const int width, int precision, enum Fmt_Flags flags, const int base,
+    double value)
 {
     char str[LOCAL_BUFFER_SIZE];
     const bool negative = value < 0.0;
-    const bool left_justify = flags & Flag_Minus;
-    const bool include_sign = negative || (flags & Flag_Plus);
-    const bool right_fill_with_zeros = ((base != 16) || precision > 0) && (!short_form);
-    const unsigned int base_padding = (base == 16) ? 2 : 0;
+    const bool uppercase = (flags & Flag_Upper) != 0;
+    const bool left_justify = (flags & Flag_Minus) != 0;
+    const bool include_sign = negative || ((flags & Flag_Plus) != 0);
+    const bool right_fill_with_zeros = ((base != 16) || precision > 0) && ((flags & Flag_Short) == 0);
+    const int base_padding = (base == 16) ? 2 : 0;
     const int left_padding = (int)(include_sign ? (base_padding+1) : base_padding);
     // Flag_Zero is ignored if Flag_Minus is informed
-    const int zeros = (short_form && !(flags & Flag_Minus) && (flags & Flag_Zero)) ? (width-left_padding) : 0;
-    double x = negative ? (-value) : value;
+    const int zeros = (!(flags & Flag_Minus) && (flags & Flag_Zero)) ? (width-left_padding) : 0;
+    value = negative ? (-value) : value;
     int written = 0;
     long int exponent = 0;
-    const double original_x = x;
+    const double original_value = value;
     if (precision < 0) { // Default precision
         precision = (base == 16) ? 13 : 6;
     }
-    if (exponent_form | short_form) {
-        exponent = float_exponent_form(&x, base == 16 ? 2 : base);
+    if (flags & (Flag_Exp | Flag_Short)) {
+        exponent = float_exponent_form(&value, base == 16 ? 2 : base);
     }
-    if (short_form) {
-        exponent_form = (ABS(exponent) >= 5);
-        precision = exponent_form ? (precision - 1) : (int)(precision - 1 - exponent);
-        if (!exponent_form) {
-            x = original_x;
+    if (flags & Flag_Short) {
+        if (ABS(exponent) >= 5) {
+            flags |= Flag_Exp;
+        }
+        precision = flags & Flag_Exp ? (precision - 1) : (int)(precision - 1 - exponent);
+        if ((flags & Flag_Exp) == 0) {
+            value = original_value;
         }
     }
-    if (exponent_form) {
+    if (flags & Flag_Exp) {
         const int exponent_base = 10;
         const int exponent_length = (base == 10) ? 2 : 1;
         const bool exponent_negative = exponent < 0;
@@ -324,9 +314,9 @@ LIBCJ_FN int float_to_str(
         }
     }
     bool has_decimal_chars = false;
-    x = rounding(x, base, precision);
+    value = rounding(value, base, precision);
     for (int exp = precision; exp > 0; exp--) {
-        const double y = scale_radix_exp(x, base, exp);
+        const double y = scale_radix_exp(value, base, exp);
         char c = (char)div_remainder(y, base);
         if (right_fill_with_zeros || has_decimal_chars || (c != 0)) {
             str[written++] = VALUE_TO_CHAR(c, uppercase);
@@ -336,11 +326,11 @@ LIBCJ_FN int float_to_str(
     if (has_decimal_chars) {
         str[written++] = '.';
     }
-    char c = (char)div_remainder(x, base);
+    char c = (char)div_remainder(value, base);
     do {
         str[written++] = VALUE_TO_CHAR(c, uppercase);
-        x = scale_radix_exp(x, base, -1);
-        c = (char)div_remainder(x, base);
+        value = scale_radix_exp(value, base, -1);
+        c = (char)div_remainder(value, base);
     } while (c > 0);
     while (written < zeros) {
         str[written++] = '0';
@@ -573,33 +563,36 @@ LIBCJ_FN int __vsnprintf(char **buf, size_t *const sz, const char *fmt, va_list 
             if (specifier != Fmt_unknown) {
                 cursor += parsed_chars;
             }
+            if (uppercase) {
+                flags |= Flag_Upper;
+            }
             switch (specifier) {
             case Fmt_d:
             case Fmt_i: // Signed integer
-                written += int_to_str(buf, sz, width, precision, flags, uppercase, 10, true, next_int_arg(args, modifier));
+                written += int_to_str(buf, sz, width, precision, flags, 10, true, next_int_arg(args, modifier));
                 break;
             case Fmt_u: // Unsigned integer
-                written += int_to_str(buf, sz, width, precision, flags, uppercase, 10, false, next_uint_arg(args, modifier));
+                written += int_to_str(buf, sz, width, precision, flags, 10, false, next_uint_arg(args, modifier));
                 break;
             case Fmt_o: // Unsigned integer in octal form
                 flags = flags & (enum Fmt_Flags)~Flag_Plus; // This flag isn't supported for octal numbers
-                written += int_to_str(buf, sz, width, precision, flags, uppercase, 8, false, next_uint_arg(args, modifier));
+                written += int_to_str(buf, sz, width, precision, flags, 8, false, next_uint_arg(args, modifier));
                 break;
             case Fmt_x: // Unsigned integer in hexadecimal form
                 flags = flags & (enum Fmt_Flags)~Flag_Plus; // This flag isn't supported for hexadecimal numbers
-                written += int_to_str(buf, sz, width, precision, flags, uppercase, 16, false, next_uint_arg(args, modifier));
+                written += int_to_str(buf, sz, width, precision, flags, 16, false, next_uint_arg(args, modifier));
                 break;
             case Fmt_f: // Decimal floating point
-                written += float_to_str(buf, sz, width, precision, flags, false, false, uppercase, 10, next_float_arg(args, modifier));
+                written += float_to_str(buf, sz, width, precision, flags, 10, next_float_arg(args, modifier));
                 break;
             case Fmt_e: // Decimal floating point in exponent form
-                written += float_to_str(buf, sz, width, precision, flags, true, false, uppercase, 10, next_float_arg(args, modifier));
+                written += float_to_str(buf, sz, width, precision, (flags | Flag_Exp), 10, next_float_arg(args, modifier));
                 break;
             case Fmt_g: // Decimal floating point in shortest form
-                written += float_to_str(buf, sz, width, precision, flags, false, true, uppercase, 10, next_float_arg(args, modifier));
+                written += float_to_str(buf, sz, width, precision, (flags | Flag_Short), 10, next_float_arg(args, modifier));
                 break;
             case Fmt_a: // Decimal floating point in hexadecimal form
-                written += float_to_str(buf, sz, width, precision, flags, true, false, uppercase, 16, next_float_arg(args, modifier));
+                written += float_to_str(buf, sz, width, precision, (flags | Flag_Exp), 16, next_float_arg(args, modifier));
                 break;
             case Fmt_c: // Character
                 PUTCHAR((char)va_arg(args, int));
@@ -613,7 +606,7 @@ LIBCJ_FN int __vsnprintf(char **buf, size_t *const sz, const char *fmt, va_list 
                 if (ptr == NULL) {
                     written += put_string(buf, sz, width, precision, (flags & Flag_Minus), "(nil)");
                 } else {
-                    written += int_to_str(buf, sz, width, precision, (flags | Flag_Hash), uppercase, 16, false, (intmax_t)ptr);
+                    written += int_to_str(buf, sz, width, precision, (flags | Flag_Hash), 16, false, (intmax_t)ptr);
                 }
             } break;
             case Fmt_n: { // Return the number of characters written so far
