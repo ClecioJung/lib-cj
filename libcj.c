@@ -35,79 +35,57 @@
 
 #include "libcj.h"
 
+//------------------------------------------------------------------------------
+// SOURCE
+//------------------------------------------------------------------------------
+
+#ifdef __GNUC__ 
+#define INLINE_FUNCTION inline
+#elif defined(_MSC_VER)
+#define INLINE_FUNCTION __inline
+#else
+#define INLINE_FUNCTION
+#endif
+
+#if defined(__cplusplus) && (__cplusplus >= 201103L)
+#define THREAD_LOCAL thread_local
+#elif defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)
+#define THREAD_LOCAL _Thread_local
+#elif defined(_MSC_VER)
+#define THREAD_LOCAL __declspec(thread)
+#elif defined(__GNUC__) || defined(__clang__) || defined(__MINGW32__)
+#define THREAD_LOCAL __thread
+#else
+#error "No support for thread-local storage."
+#endif
+
+// Modifier for the local private functions
+#define LIBCJ_FN static INLINE_FUNCTION
+
+// Local buffer size for functions that handle strings
+#define LOCAL_BUFFER_SIZE 32 // TODO: Check for boundaries
+
 // TODO: Implement some kind of generics in C using preprocessor
 // TODO: Try to make it fast and optimized
 
-//------------------------------------------------------------------------------
-// CTYPE.H
-//------------------------------------------------------------------------------
+#define VALUE_TO_CHAR(value, uppercase) \
+    (((value) < 10) ? ((value) + '0') : (value - 10 + ((uppercase) ? 'A' : 'a')))
 
-// TODO: isalnum    Check if character is alphanumeric
-// TODO: isalpha    Check if character is alphabetic
-// TODO: isblank    Check if character is blank
-// TODO: iscntrl    Check if character is a control character
-// TODO: isdigit    Check if character is decimal digit
-// TODO: isgraph    Check if character has graphical representation
-// TODO: islower    Check if character is lowercase letter
-// TODO: isprint    Check if character is printable
-// TODO: ispunct    Check if character is a punctuation character
-// TODO: isspace    Check if character is a white-space
-// TODO: isupper    Check if character is uppercase letter
-// TODO: isxdigit   Check if character is hexadecimal digit
-// TODO: tolower    Convert uppercase letter to lowercase
-// TODO: toupper    Convert lowercase letter to uppercase
+#define PUTCHAR(c)              \
+    do {                        \
+        if (sz == NULL) {       \
+            **buf = (c);        \
+            (*buf)++;           \
+        } else if (*sz > 1) {   \
+            **buf = (c);        \
+            (*buf)++;           \
+            (*sz)--;            \
+        }                       \
+    } while (0)
 
-//------------------------------------------------------------------------------
-// STRING.H
-//------------------------------------------------------------------------------
-
-// TODO: memcpy     Copy block of memory
-// TODO: memmove    Move block of memory
-// TODO: strcpy     Copy string
-// TODO: strncpy    Copy characters from string
-// TODO: strcat     Concatenate strings
-// TODO: strncat    Append characters from string
-// TODO: memcmp     Compare two blocks of memory
-// TODO: strcmp     Compare two strings
-// TODO: strncmp    Compare characters of two strings
-// TODO: memchr     Locate character in block of memory
-// TODO: strchr     Locate first occurrence of character in string
-// TODO: strcspn    Get span until character in string
-// TODO: strpbrk    Locate characters in string
-// TODO: strrchr    Locate last occurrence of character in string
-// TODO: strspn     Get span of character set in string
-// TODO: strstr     Locate substring
-// TODO: strtok     Split string into tokens
-// TODO: memset     Fill block of memory
-
-size_t strlen(const char *str)
-{
-    size_t i = 0;
-    while (str[i] != '\0') {
-        i++;
-    }
-    return i;
-}
-
-//------------------------------------------------------------------------------
-// STDLIB.H
-//------------------------------------------------------------------------------
-
-// TODO: atof       Convert string to double
-// TODO: atoi       Convert string to integer
-// TODO: atol       Convert string to long integer
-// TODO: atoll      Convert string to long long integer
-// TODO: strtod     Convert string to double
-// TODO: strtof     Convert string to float
-// TODO: strtol     Convert string to long integer
-// TODO: strtold    Convert string to long double
-// TODO: strtoll    Convert string to long long integer
-// TODO: strtoul    Convert string to unsigned long integer
-// TODO: strtoull   Convert string to unsigned long long integer
-
-//------------------------------------------------------------------------------
-// STDIO.H
-//------------------------------------------------------------------------------
+#define MIN(x, y) (((x) < (y)) ? (x) : (y))
+#define MAX(x, y) (((x) > (y)) ? (x) : (y))
+#define ABS(x)    (((x) >= 0) ? (x) : -(x))
 
 // The length modifiers j, z and t are not implemented
 enum Length_Modifier {
@@ -133,14 +111,10 @@ enum Fmt_Flags {
 };
 
 // Parses a integer number using base 8, 10 or 16
-static int str_to_int(
-    const char *fmt,
-    const unsigned int base,
-    long int *const value
-)
+LIBCJ_FN int str_to_int(const char *fmt, const int base, int *const value)
 {
     int index = 0;
-    long int number = 0;
+    int number = 0;
     for (; fmt[index] != '\0'; index++) {
         const char c = fmt[index];
         int digit = 0;
@@ -151,14 +125,14 @@ static int str_to_int(
         } else {
             break;
         }
-        // TODO: I believe that still could happen an overflow
-        if (number <= LONG_MAX / base) {
+        // TODO: I believe that still could happen an overflow - test with this number: 0x17ffffff
+        if (number <= INT_MAX / base) {
             number = base * number + digit;
         } else {
             // Overflow detected
-            // In this case we return the maximum positive number that a long int can store
-            // We continue the loop, in order to parse all the number
-            number = LONG_MAX;
+            // In this case we return the maximum positive number that a int can store,
+            // and we continue the loop, in order to parse all the number
+            number = INT_MAX;
         }
     }
     if (index > 0) {
@@ -167,22 +141,7 @@ static int str_to_int(
     return index;
 }
 
-#define VALUE_TO_CHAR(value, uppercase) (((value) < 10) ? ((value) + '0') : (value - 10 + ((uppercase) ? 'A' : 'a')))
-
-#define PUTCHAR(c)              \
-    do {                        \
-        if (sz == NULL) {       \
-            **buf = (c);        \
-            (*buf)++;           \
-        } else if (*sz > 1) {   \
-            **buf = (c);        \
-            (*buf)++;           \
-            (*sz)--;            \
-        }                       \
-    } while (0)
-
-
-static int                      // Return the amount of characters that would have been written if we had enough size
+LIBCJ_FN int                      // Return the amount of characters that would have been written if we had enough size
 int_to_str(
     char **buf,                 // Buffer in which we must write the output string
     size_t *const sz,           // Size of the buffer
@@ -195,7 +154,7 @@ int_to_str(
     const intmax_t value        // Integer value to be converted to string
 )
 {
-    char str[32]; // TODO: Check for boundaries
+    char str[LOCAL_BUFFER_SIZE]; 
     const bool left_justify = flags & Flag_Minus;
     const bool negative = sign && (value < 0);
     // Pointers are the only unsigned integer that can have the plus sign
@@ -248,7 +207,7 @@ int_to_str(
 }
 
 // Computes x * base^exponent
-static double scale_radix_exp(double x, const unsigned int radix, int exponent) {
+LIBCJ_FN double scale_radix_exp(double x, const unsigned int radix, int exponent) {
     if (x == 0.0) {
         return x;
     }
@@ -269,7 +228,7 @@ static double scale_radix_exp(double x, const unsigned int radix, int exponent) 
     return x;
 }
 
-static long div_remainder(const double dividend, const double divisor)
+LIBCJ_FN long div_remainder(const double dividend, const double divisor)
 {
     const long quotient = (long)(dividend / divisor);
     const double remainder = dividend - (divisor * (double)quotient);
@@ -277,7 +236,7 @@ static long div_remainder(const double dividend, const double divisor)
 }
 
 // value must be positive
-static long int float_exponent_form(double *const value, const unsigned int base)
+LIBCJ_FN long int float_exponent_form(double *const value, const unsigned int base)
 {
     long int exponent = 0;
     if (*value == 0.0) {
@@ -297,7 +256,7 @@ static long int float_exponent_form(double *const value, const unsigned int base
     return exponent;
 }
 
-static double rounding(const double value, const unsigned int base, const int decimal_places)
+LIBCJ_FN double rounding(const double value, const unsigned int base, const int decimal_places)
 {
     const double y = scale_radix_exp(value, base, decimal_places);
     const double remainder = y - (long)y;
@@ -308,13 +267,8 @@ static double rounding(const double value, const unsigned int base, const int de
     return value;
 }
 
-#define ABS(x)  (((x) >= 0) ? (x) : -(x))
-
-// TODO: Implement a sort of generics with this functions
-// The current version will be just to slow in embedded
-
-static int                      // Return the amount of characters that would have been written if we had enough size
-float_to_str(
+// Return the amount of characters that would have been written if we had enough size
+LIBCJ_FN int float_to_str(
     char **buf,                 // Buffer in which we must write the output string
     size_t *const sz,           // Size of the buffer
     const int width,
@@ -327,7 +281,7 @@ float_to_str(
     const double value          // Float value to be converted to string
 )
 {
-    char str[32]; // TODO: Check for boundaries
+    char str[LOCAL_BUFFER_SIZE];
     const bool negative = value < 0.0;
     const bool left_justify = flags & Flag_Minus;
     const bool include_sign = negative || (flags & Flag_Plus);
@@ -401,7 +355,7 @@ float_to_str(
     if (flags & Flag_Space) {
         str[written++] = ' ';
     }
-    if (!left_justify && short_form) {
+    if (!left_justify) {
         while (written < width) {
             str[written++] = ' ';
         }
@@ -409,7 +363,7 @@ float_to_str(
     for (int index = written; index > 0; index--) {
         PUTCHAR(str[index-1]);
     }
-    if (left_justify && short_form) {
+    if (left_justify) {
         while (written < width) {
             PUTCHAR(' ');
             written++;
@@ -420,16 +374,7 @@ float_to_str(
     return written;
 }
 
-#define MIN(x, y) (((x) < (y)) ? (x) : (y))
-
-static int put_string(
-    char **buf,
-    size_t *const sz,
-    const int width,
-    int precision,
-    const bool left_justify, // Right justification is the default
-    const char *string
-)
+LIBCJ_FN int put_string(char **buf, size_t *const sz, const int width, int precision, const bool left_justify, const char *string)
 {
     int written = 0;
     if (string == NULL) {
@@ -461,10 +406,7 @@ static int put_string(
     return written;
 }
 
-static int parse_fmt_flags(
-    const char *const fmt,
-    enum Fmt_Flags *const flags
-)
+LIBCJ_FN int parse_fmt_flags(const char *const fmt, enum Fmt_Flags *const flags)
 {
     *flags = Flag_None;
     int index = 0;
@@ -482,13 +424,29 @@ static int parse_fmt_flags(
 }
 
 // TODO: scanf does not have precision
+LIBCJ_FN int parse_width_precision(const char *const fmt, va_list args, int *const width, int *const precision)
+{
+    int index = 0;
+    if (fmt[index] == '*') {
+        index++;
+        *width = va_arg(args, int);
+    } else {
+        index += str_to_int(&fmt[index], 10, width);
+    }
+    if (fmt[index] == '.') {
+        index++;
+        if (fmt[index] == '*') {
+            index++;
+            *precision = va_arg(args, int);
+        } else {
+            index += str_to_int(&fmt[index], 10, precision);
+        }
+    }
+    return index;
+}
+
 // TODO: scanf has a special "flag" asterisk
-static int parse_fmt_specifier(
-    const char *const fmt,
-    enum Fmt_Specifier *const specifier,
-    enum Length_Modifier *const modifier,
-    bool *const uppercase
-)
+LIBCJ_FN int parse_fmt_specifier(const char *const fmt, enum Fmt_Specifier *const specifier, enum Length_Modifier *const modifier, bool *const uppercase)
 {
     int index = 0;
     *specifier = Fmt_unknown;
@@ -547,7 +505,7 @@ static int parse_fmt_specifier(
     return (index + 1);
 }
 
-static intmax_t next_int_arg(va_list args, enum Length_Modifier modifier)
+LIBCJ_FN intmax_t next_int_arg(va_list args, enum Length_Modifier modifier)
 {
     switch (modifier) {
     case Modifier_char: return (char)va_arg(args, int);
@@ -560,7 +518,7 @@ static intmax_t next_int_arg(va_list args, enum Length_Modifier modifier)
     }
 }
 
-static intmax_t next_uint_arg(va_list args, enum Length_Modifier modifier)
+LIBCJ_FN intmax_t next_uint_arg(va_list args, enum Length_Modifier modifier)
 {
     switch (modifier) {
     case Modifier_char: return (unsigned char)va_arg(args, unsigned int);
@@ -573,7 +531,7 @@ static intmax_t next_uint_arg(va_list args, enum Length_Modifier modifier)
     }
 }
 
-static double next_float_arg(va_list args, enum Length_Modifier modifier)
+LIBCJ_FN double next_float_arg(va_list args, enum Length_Modifier modifier)
 {
     switch (modifier) {
     case Modifier_longdouble: return (double)va_arg(args, long double);
@@ -586,9 +544,7 @@ static double next_float_arg(va_list args, enum Length_Modifier modifier)
     }
 }
 
-// TODO: The zero flag is ignored with strings and when precision is specified
-
-static int __vsnprintf(char **buf, size_t *const sz, const char *fmt, va_list args)
+LIBCJ_FN int __vsnprintf(char **buf, size_t *const sz, const char *fmt, va_list args)
 {
     enum Fmt_Specifier specifier;
     enum Fmt_Flags flags;
@@ -610,18 +566,8 @@ static int __vsnprintf(char **buf, size_t *const sz, const char *fmt, va_list ar
             // %[flags][width][.precision][length]specifier
             // https://cplusplus.com/reference/cstdio/printf/
             int parsed_chars = parse_fmt_flags(cursor, &flags);
-            long int width = -1, precision = -1;
-            parsed_chars += str_to_int((cursor+parsed_chars), 10, &width);
-            if (*(cursor+parsed_chars) == '.') {
-                parsed_chars++;
-                // The width can be replaced by asterisk instead of using numbers
-                if (*(cursor+parsed_chars) == '*') {
-                    parsed_chars++;
-                    precision = va_arg(args, int);
-                } else {
-                    parsed_chars += str_to_int((cursor+parsed_chars), 10, &precision);
-                }
-            }
+            int width = -1, precision = -1;
+            parsed_chars += parse_width_precision((cursor+parsed_chars), args, &width, &precision);
             parsed_chars += parse_fmt_specifier((cursor+parsed_chars), &specifier, &modifier, &uppercase);
             // If the format specifier was fully parsed, update the cursor position
             if (specifier != Fmt_unknown) {
@@ -630,44 +576,44 @@ static int __vsnprintf(char **buf, size_t *const sz, const char *fmt, va_list ar
             switch (specifier) {
             case Fmt_d:
             case Fmt_i: // Signed integer
-                written += int_to_str(buf, sz, (int)width, (int)precision, flags, uppercase, 10, true, next_int_arg(args, modifier));
+                written += int_to_str(buf, sz, width, precision, flags, uppercase, 10, true, next_int_arg(args, modifier));
                 break;
             case Fmt_u: // Unsigned integer
-                written += int_to_str(buf, sz, (int)width, (int)precision, flags, uppercase, 10, false, next_uint_arg(args, modifier));
+                written += int_to_str(buf, sz, width, precision, flags, uppercase, 10, false, next_uint_arg(args, modifier));
                 break;
             case Fmt_o: // Unsigned integer in octal form
                 flags = flags & (enum Fmt_Flags)~Flag_Plus; // This flag isn't supported for octal numbers
-                written += int_to_str(buf, sz, (int)width, (int)precision, flags, uppercase, 8, false, next_uint_arg(args, modifier));
+                written += int_to_str(buf, sz, width, precision, flags, uppercase, 8, false, next_uint_arg(args, modifier));
                 break;
             case Fmt_x: // Unsigned integer in hexadecimal form
                 flags = flags & (enum Fmt_Flags)~Flag_Plus; // This flag isn't supported for hexadecimal numbers
-                written += int_to_str(buf, sz, (int)width, (int)precision, flags, uppercase, 16, false, next_uint_arg(args, modifier));
+                written += int_to_str(buf, sz, width, precision, flags, uppercase, 16, false, next_uint_arg(args, modifier));
                 break;
             case Fmt_f: // Decimal floating point
-                written += float_to_str(buf, sz, (int)width, (int)precision, flags, false, false, uppercase, 10, next_float_arg(args, modifier));
+                written += float_to_str(buf, sz, width, precision, flags, false, false, uppercase, 10, next_float_arg(args, modifier));
                 break;
             case Fmt_e: // Decimal floating point in exponent form
-                written += float_to_str(buf, sz, (int)width, (int)precision, flags, true, false, uppercase, 10, next_float_arg(args, modifier));
+                written += float_to_str(buf, sz, width, precision, flags, true, false, uppercase, 10, next_float_arg(args, modifier));
                 break;
             case Fmt_g: // Decimal floating point in shortest form
-                written += float_to_str(buf, sz, (int)width, (int)precision, flags, false, true, uppercase, 10, next_float_arg(args, modifier));
+                written += float_to_str(buf, sz, width, precision, flags, false, true, uppercase, 10, next_float_arg(args, modifier));
                 break;
             case Fmt_a: // Decimal floating point in hexadecimal form
-                written += float_to_str(buf, sz, (int)width, (int)precision, flags, true, false, uppercase, 16, next_float_arg(args, modifier));
+                written += float_to_str(buf, sz, width, precision, flags, true, false, uppercase, 16, next_float_arg(args, modifier));
                 break;
             case Fmt_c: // Character
                 PUTCHAR((char)va_arg(args, int));
                 written++;
                 break;
             case Fmt_s: // String
-                written += put_string(buf, sz, (int)width, (int)precision, (flags & Flag_Minus), va_arg(args, char *));
+                written += put_string(buf, sz, width, precision, (flags & Flag_Minus), va_arg(args, char *));
                 break;
             case Fmt_p: { // Pointer
                 const void *ptr = va_arg(args, void *);
                 if (ptr == NULL) {
-                    written += put_string(buf, sz, (int)width, (int)precision, (flags & Flag_Minus), "(nil)");
+                    written += put_string(buf, sz, width, precision, (flags & Flag_Minus), "(nil)");
                 } else {
-                    written += int_to_str(buf, sz, (int)width, (int)precision, (flags | Flag_Hash), uppercase, 16, false, (intmax_t)ptr);
+                    written += int_to_str(buf, sz, width, precision, (flags | Flag_Hash), uppercase, 16, false, (intmax_t)ptr);
                 }
             } break;
             case Fmt_n: { // Return the number of characters written so far
@@ -688,6 +634,90 @@ static int __vsnprintf(char **buf, size_t *const sz, const char *fmt, va_list ar
     }
     return written;
 }
+
+// Temporary buffer print function
+char *tprint(char *fmt, ...) {
+    static THREAD_LOCAL char buffer[4096];
+    va_list args;
+    va_start(args, fmt);
+    const int written = vsnprintf(buffer, sizeof(buffer), fmt, args);
+    va_end(args);
+    if (written >= 0) {
+        return buffer;
+    }
+    return NULL;
+}
+
+//------------------------------------------------------------------------------
+// CTYPE.H
+//------------------------------------------------------------------------------
+
+// TODO: isalnum    Check if character is alphanumeric
+// TODO: isalpha    Check if character is alphabetic
+// TODO: isblank    Check if character is blank
+// TODO: iscntrl    Check if character is a control character
+// TODO: isdigit    Check if character is decimal digit
+// TODO: isgraph    Check if character has graphical representation
+// TODO: islower    Check if character is lowercase letter
+// TODO: isprint    Check if character is printable
+// TODO: ispunct    Check if character is a punctuation character
+// TODO: isspace    Check if character is a white-space
+// TODO: isupper    Check if character is uppercase letter
+// TODO: isxdigit   Check if character is hexadecimal digit
+// TODO: tolower    Convert uppercase letter to lowercase
+// TODO: toupper    Convert lowercase letter to uppercase
+
+//------------------------------------------------------------------------------
+// STRING.H
+//------------------------------------------------------------------------------
+
+// TODO: memcpy     Copy block of memory
+// TODO: memmove    Move block of memory
+// TODO: strcpy     Copy string
+// TODO: strncpy    Copy characters from string
+// TODO: strcat     Concatenate strings
+// TODO: strncat    Append characters from string
+// TODO: memcmp     Compare two blocks of memory
+// TODO: strcmp     Compare two strings
+// TODO: strncmp    Compare characters of two strings
+// TODO: memchr     Locate character in block of memory
+// TODO: strchr     Locate first occurrence of character in string
+// TODO: strcspn    Get span until character in string
+// TODO: strpbrk    Locate characters in string
+// TODO: strrchr    Locate last occurrence of character in string
+// TODO: strspn     Get span of character set in string
+// TODO: strstr     Locate substring
+// TODO: strtok     Split string into tokens
+// TODO: memset     Fill block of memory
+
+size_t strlen(const char *str)
+{
+    size_t i = 0;
+    while (str[i] != '\0') {
+        i++;
+    }
+    return i;
+}
+
+//------------------------------------------------------------------------------
+// STDLIB.H
+//------------------------------------------------------------------------------
+
+// TODO: atof       Convert string to double
+// TODO: atoi       Convert string to integer
+// TODO: atol       Convert string to long integer
+// TODO: atoll      Convert string to long long integer
+// TODO: strtod     Convert string to double
+// TODO: strtof     Convert string to float
+// TODO: strtol     Convert string to long integer
+// TODO: strtold    Convert string to long double
+// TODO: strtoll    Convert string to long long integer
+// TODO: strtoul    Convert string to unsigned long integer
+// TODO: strtoull   Convert string to unsigned long long integer
+
+//------------------------------------------------------------------------------
+// STDIO.H
+//------------------------------------------------------------------------------
 
 int sprintf(char *buf, const char *fmt, ...)
 {
@@ -715,30 +745,6 @@ int vsprintf(char *buf, const char *fmt, va_list args)
 int vsnprintf(char *buf, size_t sz, const char *fmt, va_list args)
 {
     return __vsnprintf(&buf, &sz, fmt, args);
-}
-
-#if defined(__cplusplus) && (__cplusplus >= 201103L)
-#define THREAD_LOCAL thread_local
-#elif defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)
-#define THREAD_LOCAL _Thread_local
-#elif defined(_MSC_VER)
-#define THREAD_LOCAL __declspec(thread)
-#elif defined(__GNUC__) || defined(__clang__) || defined(__MINGW32__)
-#define THREAD_LOCAL __thread
-#else
-#error "No support for thread-local storage."
-#endif
-
-char *tprint(char *fmt, ...) {
-    static THREAD_LOCAL char buffer[4096];
-    va_list args;
-    va_start(args, fmt);
-    const int written = vsnprintf(buffer, sizeof(buffer), fmt, args);
-    va_end(args);
-    if (written >= 0) {
-        return buffer;
-    }
-    return NULL;
 }
 
 // https://cplusplus.com/reference/cstdio/scanf/
