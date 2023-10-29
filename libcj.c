@@ -119,6 +119,7 @@ enum Fmt_Flags {
 
 // This macro defines a function that parses a sign integer number
 // using bases from 0 to 36
+// It returns the amount of characters consumed
 #define CREATE_STR_TO_INT_FN(name, type, zero, max, min) \
     static int name ( \
         const char *const str, \
@@ -189,6 +190,7 @@ CREATE_STR_TO_INT_FN(str_to_uint, unsigned int, (unsigned int)0, UINT_MAX, (unsi
 CREATE_STR_TO_INT_FN(str_to_ulong, unsigned long, 0UL, ULONG_MAX, 0UL)
 CREATE_STR_TO_INT_FN(str_to_ullong, unsigned long long, 0ULL, ULLONG_MAX, 0ULL)
 
+// Generic function to convert integer numbers to string
 // Return the amount of characters that would have been written if we had enough size
 static int int_to_str(char **buf, size_t *const sz,
     const int width, const int precision, const enum Fmt_Flags flags, const int base,
@@ -248,28 +250,33 @@ static int int_to_str(char **buf, size_t *const sz,
 }
 
 // Computes x * base^exponent
-static double scale_radix_exp(double x, const int radix, int exponent) {
-    if (x == 0.0) {
-        return x;
+#define CREATE_SCALE_RADIX_EXP_FN(name, type, zero, max) \
+    static type name(type x, const int radix, int exponent) { \
+        if (x == zero) { \
+            return x; \
+        } \
+        if (exponent < 0) { \
+            while (exponent++ != 0) { \
+                x /= (type)radix; \
+            } \
+        } else { \
+            while (exponent-- != 0) { \
+                if (x < -(type)max/(type)radix) { \
+                    return -HUGE_VAL; \
+                } else if ((type)max/(type)radix < x) { \
+                    return HUGE_VAL; \
+                } \
+                x *= (type)radix; \
+            } \
+        } \
+        return x; \
     }
-    if (exponent < 0) {
-        while (exponent++ != 0) {
-            x /= radix;
-        }
-    } else {
-        while (exponent-- != 0) {
-            if (x < -DBL_MAX / radix) {
-                return -HUGE_VAL;
-            } else if (DBL_MAX / radix < x) {
-                return HUGE_VAL;
-            }
-            x *= radix;
-        }
-    }
-    return x;
-}
 
-LIBCJ_FN long div_remainder(const double dividend, const double divisor)
+CREATE_SCALE_RADIX_EXP_FN(scale_radix_exp_float, float, 0.0f, FLT_MAX)
+CREATE_SCALE_RADIX_EXP_FN(scale_radix_exp_double, double, 0.0, DBL_MAX)
+CREATE_SCALE_RADIX_EXP_FN(scale_radix_exp_ldouble, long double, 0.0L, LDBL_MAX)
+
+LIBCJ_FN long div_remainder_double(const double dividend, const double divisor)
 {
     const long quotient = (long)(dividend / divisor);
     const double remainder = dividend - (divisor * (double)quotient);
@@ -277,7 +284,7 @@ LIBCJ_FN long div_remainder(const double dividend, const double divisor)
 }
 
 // value must be positive
-LIBCJ_FN long int float_exponent_form(double *const value, const int base)
+LIBCJ_FN long int exponent_form_double(double *const value, const int base)
 {
     long int exponent = 0;
     if (*value == 0.0) {
@@ -285,31 +292,32 @@ LIBCJ_FN long int float_exponent_form(double *const value, const int base)
     }
     if ((int)(*value/base) > 0) {
         while ((int)(*value/base) > 0) {
-            *value = scale_radix_exp(*value, base, -1);
+            *value = scale_radix_exp_double(*value, base, -1);
             exponent++;
         }
     } else {
         while ((int)(*value) == 0) {
-            *value = scale_radix_exp(*value, base, 1);
+            *value = scale_radix_exp_double(*value, base, 1);
             exponent--;
         }
     }
     return exponent;
 }
 
-LIBCJ_FN double rounding(const double value, const int base, const int decimal_places)
+LIBCJ_FN double rouding_double(const double value, const int base, const int decimal_places)
 {
-    const double y = scale_radix_exp(value, base, decimal_places);
+    const double y = scale_radix_exp_double(value, base, decimal_places);
     const double remainder = y - (long)y;
     if (remainder >= 0.5) {
-        const double value_to_add = scale_radix_exp((1.0), base, -decimal_places);
+        const double value_to_add = scale_radix_exp_double((1.0), base, -decimal_places);
         return (value + value_to_add);
     }
     return value;
 }
 
+// Generic function to convert floating point numbers to string
 // Return the amount of characters that would have been written if we had enough size
-static int float_to_str(char **buf, size_t *const sz,
+static int double_to_str(char **buf, size_t *const sz,
     const int width, int precision, enum Fmt_Flags flags, const int base,
     double value)
 {
@@ -331,7 +339,7 @@ static int float_to_str(char **buf, size_t *const sz,
         precision = (base == 16) ? 13 : 6;
     }
     if (flags & (Flag_Exp | Flag_Short)) {
-        exponent = float_exponent_form(&value, base == 16 ? 2 : base);
+        exponent = exponent_form_double(&value, base == 16 ? 2 : base);
     }
     if (flags & Flag_Short) {
         if (ABS(exponent) >= 5) {
@@ -359,10 +367,10 @@ static int float_to_str(char **buf, size_t *const sz,
         }
     }
     bool has_decimal_chars = false;
-    value = rounding(value, base, precision);
+    value = rouding_double(value, base, precision);
     for (int exp = precision; exp > 0; exp--) {
-        const double y = scale_radix_exp(value, base, exp);
-        char c = (char)div_remainder(y, base);
+        const double y = scale_radix_exp_double(value, base, exp);
+        char c = (char)div_remainder_double(y, base);
         if (right_fill_with_zeros || has_decimal_chars || (c != 0)) {
             str[written++] = VALUE_TO_CHAR(c, uppercase);
             has_decimal_chars = true;
@@ -371,11 +379,11 @@ static int float_to_str(char **buf, size_t *const sz,
     if (has_decimal_chars) {
         str[written++] = '.';
     }
-    char c = (char)div_remainder(value, base);
+    char c = (char)div_remainder_double(value, base);
     do {
         str[written++] = VALUE_TO_CHAR(c, uppercase);
-        value = scale_radix_exp(value, base, -1);
-        c = (char)div_remainder(value, base);
+        value = scale_radix_exp_double(value, base, -1);
+        c = (char)div_remainder_double(value, base);
     } while (c > 0);
     while (written < zeros) {
         str[written++] = '0';
@@ -408,6 +416,59 @@ static int float_to_str(char **buf, size_t *const sz,
     // This is responsability of its caller
     return written;
 }
+
+// It returns the amount of characters consumed
+#define CREATE_STR_TO_FLOAT_FN(name, type, zero, max, fn) \
+    int name(const char *const str, type *const value) { \
+        const int base = 10; \
+        bool dotted = false; \
+        int exponent = 0; \
+        int index = 0; \
+        bool negative = false; \
+        *value = zero; \
+        if ((str[index] == '+') || (str[index] == '-')) { \
+            negative = str[index] == '-'; \
+            index++; \
+        } \
+        for (; str[index] != '\0'; index++) { \
+            if (isdigit(str[index])) { \
+                const int digit = str[index] - '0'; \
+                if (*value <= max / (type)base) { \
+                    *value = *value * (type)base + (type)digit; \
+                } else { \
+                    exponent++; \
+                } \
+                if (dotted) { \
+                    exponent--; \
+                } \
+            } else if (str[index] == '.') { \
+                if (dotted) { \
+                    break; \
+                } \
+                dotted = true; \
+            } else { \
+                break; \
+            } \
+        } \
+        if (tolower(str[index]) == 'e') { \
+            int exp; \
+            const int parsed = str_to_int(&str[index+1], base, &exp); \
+            if (parsed > 0) { \
+                index += parsed; \
+                if (exponent > 0) { \
+                    exponent = ((INT_MAX - exponent) < exp) ? INT_MAX : (exponent + exp); \
+                } else { \
+                    exponent = (exp < (INT_MIN - exponent)) ? INT_MIN : (exponent + exp); \
+                } \
+            } \
+        } \
+        *value = fn(negative ? -(*value) : *value, base, exponent); \
+        return index; \
+    }
+
+CREATE_STR_TO_FLOAT_FN(str_to_float, float, 0.0f, FLT_MAX, scale_radix_exp_float)
+CREATE_STR_TO_FLOAT_FN(str_to_double, double, 0.0, DBL_MAX, scale_radix_exp_double)
+CREATE_STR_TO_FLOAT_FN(str_to_ldouble, long double, 0.0L, LDBL_MAX, scale_radix_exp_ldouble)
 
 static int put_string(char **buf, size_t *const sz, const int width, int precision, const bool left_justify, const char *string)
 {
@@ -628,16 +689,16 @@ static int __vsnprintf(char **buf, size_t *const sz, const char *fmt, va_list ar
                 written += int_to_str(buf, sz, width, precision, flags, 16, false, next_uint_arg(args, modifier));
                 break;
             case Fmt_f: // Decimal floating point
-                written += float_to_str(buf, sz, width, precision, flags, 10, next_float_arg(args, modifier));
+                written += double_to_str(buf, sz, width, precision, flags, 10, next_float_arg(args, modifier));
                 break;
             case Fmt_e: // Decimal floating point in exponent form
-                written += float_to_str(buf, sz, width, precision, (flags | Flag_Exp), 10, next_float_arg(args, modifier));
+                written += double_to_str(buf, sz, width, precision, (flags | Flag_Exp), 10, next_float_arg(args, modifier));
                 break;
             case Fmt_g: // Decimal floating point in shortest form
-                written += float_to_str(buf, sz, width, precision, (flags | Flag_Short), 10, next_float_arg(args, modifier));
+                written += double_to_str(buf, sz, width, precision, (flags | Flag_Short), 10, next_float_arg(args, modifier));
                 break;
             case Fmt_a: // Decimal floating point in hexadecimal form
-                written += float_to_str(buf, sz, width, precision, (flags | Flag_Exp), 16, next_float_arg(args, modifier));
+                written += double_to_str(buf, sz, width, precision, (flags | Flag_Exp), 16, next_float_arg(args, modifier));
                 break;
             case Fmt_c: // Character
                 PUTCHAR((char)va_arg(args, int));
@@ -1119,10 +1180,35 @@ CREATE_STRTOI_FN(strtou, unsigned int, str_to_uint)
 CREATE_STRTOI_FN(strtoul, unsigned long, str_to_ulong)
 CREATE_STRTOI_FN(strtoull, unsigned long long, str_to_ullong)
 
-// TODO: atof       Convert string to double
-// TODO: strtof     Convert string to float
-// TODO: strtod     Convert string to double
-// TODO: strtold    Convert string to long double
+// Convert string to double
+double atof(const char *str)
+{
+    while ((*str != '\0') && isspace(*str)) {
+        str++;
+    }
+    double value;
+    str_to_double(str, &value);
+    return value;
+}
+
+// Convert string to floating point number
+#define CREATE_STRTOF_FN(name, type, fn) \
+    type name(const char *str, char **endptr) \
+    { \
+        while ((*str != '\0') && isspace(*str)) { \
+            str++; \
+        } \
+        type value; \
+        const int parsed = fn(str, &value); \
+        if (endptr != NULL) { \
+            *endptr = (char *)str + parsed; \
+        } \
+        return value; \
+    }
+
+CREATE_STRTOF_FN(strtof, float, str_to_float)
+CREATE_STRTOF_FN(strtod, double, str_to_double)
+CREATE_STRTOF_FN(strtold, long double, str_to_ldouble)
 
 //------------------------------------------------------------------------------
 // STDIO.H

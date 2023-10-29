@@ -79,6 +79,10 @@ long long strtoll(const char *str, char **endptr, int base);
 unsigned int strtou(const char *str, char **endptr, int base); // This function isn't defined by standard-C
 unsigned long strtoul(const char *str, char **endptr, int base);
 unsigned long long strtoull(const char *str, char **endptr, int base);
+double atof(const char *str);
+float strtof(const char *str, char **endptr);
+double strtod(const char *str, char **endptr);
+long double strtold(const char *str, char **endptr);
 
 int sprintf(char *buf, const char *fmt, ...)
     __attribute__((format(printf, 2, 3)));
@@ -86,6 +90,8 @@ int snprintf(char *buf, size_t sz, const char *fmt, ...)
     __attribute__((format(printf, 3, 4)));
 int vsprintf(char *buf, const char *fmt, va_list args);
 int vsnprintf(char *buf, size_t sz, const char *fmt, va_list args);
+
+// Temporary buffer print function
 char *tprint(char *fmt, ...)
     __attribute__((format(printf, 1, 2)));
 

@@ -17,6 +17,7 @@ FUNCTIONS := tolower toupper \
 			 memchr strchr strcspn strpbrk strchr strspn \
 			 strstr strtok memset strlen \
 			 atoi atol atoll strtol strtoll strtoul strtoull \
+			 atof strtof strtod strtold \
              snprintf
 
 # Function that uses nm to check if a function name (2nd argument) is undefined in a object file (1st argument)

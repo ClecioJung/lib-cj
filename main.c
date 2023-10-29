@@ -32,6 +32,7 @@
 #endif // USE_LIB_CJ
 
 #include <limits.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -55,6 +56,12 @@
 #define EXPECT_ULONG(value, to_equal) expect_ulong(__FILE__, __LINE__, value, to_equal)
 #define EXPECT_ULLONG(value, to_equal) expect_ullong(__FILE__, __LINE__, value, to_equal)
 #define EXPECT_SIZE(value, to_equal) expect_size(__FILE__, __LINE__, value, to_equal)
+#define EXPECT_FLOAT(value, to_equal) expect_float(__FILE__, __LINE__, value, to_equal)
+#define EXPECT_DOUBLE(value, to_equal) expect_double(__FILE__, __LINE__, value, to_equal)
+#define EXPECT_LDOUBLE(value, to_equal) expect_ldouble(__FILE__, __LINE__, value, to_equal)
+#define EXPECT_FLOAT_PREC(value, to_equal, precision) expect_float_prec(__FILE__, __LINE__, value, to_equal, precision)
+#define EXPECT_DOUBLE_PREC(value, to_equal, precision) expect_double_prec(__FILE__, __LINE__, value, to_equal, precision)
+#define EXPECT_LDOUBLE_PREC(value, to_equal, precision) expect_ldouble_prec(__FILE__, __LINE__, value, to_equal, precision)
 
 #define EXPECT_PTR_NOT(value, to_equal) expect_ptr_not(__FILE__, __LINE__, value, to_equal)
 #define EXPECT_CHAR_NOT(value, to_equal) expect_char_not(__FILE__, __LINE__, value, to_equal)
@@ -66,8 +73,11 @@
 #define EXPECT_ULONGNOT(value, to_equal) expect_ulong_not(__FILE__, __LINE__, value, to_equal)
 #define EXPECT_ULLONGNOT(value, to_equal) expect_ullong_not(__FILE__, __LINE__, value, to_equal)
 #define EXPECT_SIZE_NOT(value, to_equal) expect_size_not(__FILE__, __LINE__, value, to_equal)
+#define EXPECT_FLOAT_NOT(value, to_equal) expect_float_not(__FILE__, __LINE__, value, to_equal)
+#define EXPECT_DOUBLE_NOT(value, to_equal) expect_double_not(__FILE__, __LINE__, value, to_equal)
+#define EXPECT_LDOUBLE_NOT(value, to_equal) expect_ldouble_not(__FILE__, __LINE__, value, to_equal)
 
-#define CREATE_EXPECT_INT_FN(name, type, fmt) \
+#define CREATE_EXPECT_NUMBER_FN(name, type, fmt) \
     void name( \
         const char *const file, const unsigned int line, \
         const type value, const type to_equal) \
@@ -89,18 +99,47 @@
         } \
     }
 
-CREATE_EXPECT_INT_FN(expect_ptr, void *, "%p")
-CREATE_EXPECT_INT_FN(expect_int, int, "%d")
-CREATE_EXPECT_INT_FN(expect_char, char, "%hhd")
-CREATE_EXPECT_INT_FN(expect_short, short, "%hd")
-CREATE_EXPECT_INT_FN(expect_long, long, "%ld")
-CREATE_EXPECT_INT_FN(expect_llong, long long, "%lld")
-CREATE_EXPECT_INT_FN(expect_uint, unsigned int, "%u")
-CREATE_EXPECT_INT_FN(expect_uchar, unsigned char, "%hhu")
-CREATE_EXPECT_INT_FN(expect_ushort, unsigned short, "%hu")
-CREATE_EXPECT_INT_FN(expect_ulong, unsigned long, "%lu")
-CREATE_EXPECT_INT_FN(expect_ullong, unsigned long long, "%llu")
-CREATE_EXPECT_INT_FN(expect_size, size_t, "%zu")
+#define CREATE_EXPECT_NUMBER_PREC_FN(name, type, fmt, abs_fn) \
+    void name( \
+        const char *const file, const unsigned int line, \
+        const type value, const type to_equal, const type precision) \
+    { \
+        if (abs_fn(value - to_equal) > precision) { \
+            fprintf(stderr, "%s:%u [TEST FAILED] expected " # type " (precision = " fmt ")\n    " fmt "\n  but got\n    " fmt "\n", \
+                file, line, precision, to_equal, value); \
+            exit(EXIT_FAILURE); \
+        } \
+    } \
+    void name ## _not( \
+        const char *const file, const unsigned int line, \
+        const type value, const type to_equal, const type precision) \
+    { \
+        if (abs_fn(value - to_equal) < precision) { \
+            fprintf(stderr, "%s:%u [TEST FAILED] expected " # type "to be different from (precision = " fmt ")\n    " fmt "\n  but got\n    " fmt "\n", \
+                file, line, precision, to_equal, value); \
+            exit(EXIT_FAILURE); \
+        } \
+    }
+
+CREATE_EXPECT_NUMBER_FN(expect_ptr, void *, "%p")
+CREATE_EXPECT_NUMBER_FN(expect_int, int, "%d")
+CREATE_EXPECT_NUMBER_FN(expect_char, char, "%hhd")
+CREATE_EXPECT_NUMBER_FN(expect_short, short, "%hd")
+CREATE_EXPECT_NUMBER_FN(expect_long, long, "%ld")
+CREATE_EXPECT_NUMBER_FN(expect_llong, long long, "%lld")
+CREATE_EXPECT_NUMBER_FN(expect_uint, unsigned int, "%u")
+CREATE_EXPECT_NUMBER_FN(expect_uchar, unsigned char, "%hhu")
+CREATE_EXPECT_NUMBER_FN(expect_ushort, unsigned short, "%hu")
+CREATE_EXPECT_NUMBER_FN(expect_ulong, unsigned long, "%lu")
+CREATE_EXPECT_NUMBER_FN(expect_ullong, unsigned long long, "%llu")
+CREATE_EXPECT_NUMBER_FN(expect_size, size_t, "%zu")
+CREATE_EXPECT_NUMBER_FN(expect_float, float, "%f")
+CREATE_EXPECT_NUMBER_FN(expect_double, double, "%f")
+CREATE_EXPECT_NUMBER_FN(expect_ldouble, long double, "%Lf")
+
+CREATE_EXPECT_NUMBER_PREC_FN(expect_float_prec, float, "%f", fabsf)
+CREATE_EXPECT_NUMBER_PREC_FN(expect_double_prec, double, "%f", fabs)
+CREATE_EXPECT_NUMBER_PREC_FN(expect_ldouble_prec, long double, "%f", fabsl)
 
 void expect_str(const char *const file, const unsigned int line, const char *const value, const char *const to_equal)
 {
@@ -959,6 +998,125 @@ static void check_strtoull(void)
     EXPECT_ULLONG(strtoull("0123", NULL, -2), 0ULL);
 }
 
+static void check_atof(void)
+{
+    EXPECT_DOUBLE(atof("  85.3"), 85.3);
+    EXPECT_DOUBLE(atof("256.23"), 256.23);
+    EXPECT_DOUBLE(atof("0.001"), 0.001);
+    EXPECT_DOUBLE(atof("+23"), 23.0);
+    EXPECT_DOUBLE(atof(" -375"), -375.0);
+    EXPECT_DOUBLE(atof("0"), 0.0);
+    EXPECT_DOUBLE(atof("+0"), 0.0);
+    EXPECT_DOUBLE(atof("-0"), 0.0);
+    EXPECT_DOUBLE(atof("-1"), -1.0);
+    EXPECT_DOUBLE(atof("123alpha"), 123.0);
+    EXPECT_DOUBLE(atof("12.523b3"), 12.523);
+    EXPECT_DOUBLE(atof("alpha123"), 0.0);
+    EXPECT_DOUBLE(atof("123e5"), 123e5);
+    EXPECT_DOUBLE(atof("123e+2"), 123e+2);
+    EXPECT_DOUBLE(atof("123e-2"), 123e-2);
+    EXPECT_DOUBLE(atof("123E5"), 123e5);
+    EXPECT_DOUBLE(atof("123E+2"), 123e+2);
+    EXPECT_DOUBLE(atof("123E-2"), 123e-2);
+    EXPECT_DOUBLE(atof("1e-3"), 1e-3);
+    EXPECT_DOUBLE(atof("123e"), 123.0);
+}
+
+static void check_strtof(void)
+{
+    char *endptr;
+    float precision = 1e-6f;
+    EXPECT_FLOAT(strtof("  85.3", NULL), 85.3f);
+    EXPECT_FLOAT(strtof("  85.3", &endptr), 85.3f);
+    EXPECT_CHAR(*endptr, '\0');
+    EXPECT_FLOAT(strtof("256.23", NULL), 256.23f);
+    EXPECT_FLOAT_PREC(strtof("0.001", NULL), 0.001f, precision);
+    EXPECT_FLOAT(strtof("+23", NULL), 23.0f);
+    EXPECT_FLOAT(strtof(" -375", NULL), -375.0f);
+    EXPECT_FLOAT(strtof("0", NULL), 0.0f);
+    EXPECT_FLOAT(strtof("+0", NULL), 0.0f);
+    EXPECT_FLOAT(strtof("-0", NULL), 0.0f);
+    EXPECT_FLOAT(strtof("-1", NULL), -1.0f);
+    EXPECT_FLOAT(strtof("123alpha", &endptr), 123.0f);
+    EXPECT_CHAR(*endptr, 'a');
+    EXPECT_FLOAT_PREC(strtof("12.523b3", &endptr), 12.523f, precision);
+    EXPECT_CHAR(*endptr, 'b');
+    EXPECT_FLOAT(strtof("alpha123", &endptr), 0.0f);
+    EXPECT_CHAR(*endptr, 'a');
+    EXPECT_FLOAT(strtof("123e5", NULL), 123e5f);
+    EXPECT_FLOAT(strtof("123e+2", NULL), 123e+2f);
+    EXPECT_FLOAT(strtof("123e-2", NULL), 123e-2f);
+    EXPECT_FLOAT(strtof("123E5", NULL), 123e5f);
+    EXPECT_FLOAT(strtof("123E+2", NULL), 123e+2f);
+    EXPECT_FLOAT(strtof("123E-2", NULL), 123e-2f);
+    EXPECT_FLOAT_PREC(strtof("1e-3", NULL), 1e-3f, precision);
+    EXPECT_FLOAT(strtof("123e", &endptr), 123.0f);
+    EXPECT_CHAR(*endptr, 'e');
+}
+
+static void check_strtod(void)
+{
+    char *endptr;
+    EXPECT_DOUBLE(strtod("  85.3", NULL), 85.3);
+    EXPECT_DOUBLE(strtod("  85.3", &endptr), 85.3);
+    EXPECT_CHAR(*endptr, '\0');
+    EXPECT_DOUBLE(strtod("256.23", NULL), 256.23);
+    EXPECT_DOUBLE(strtod("0.001", NULL), 0.001);
+    EXPECT_DOUBLE(strtod("+23", NULL), 23.0);
+    EXPECT_DOUBLE(strtod(" -375", NULL), -375.0);
+    EXPECT_DOUBLE(strtod("0", NULL), 0.0);
+    EXPECT_DOUBLE(strtod("+0", NULL), 0.0);
+    EXPECT_DOUBLE(strtod("-0", NULL), 0.0);
+    EXPECT_DOUBLE(strtod("-1", NULL), -1.0);
+    EXPECT_DOUBLE(strtod("123alpha", &endptr), 123.0);
+    EXPECT_CHAR(*endptr, 'a');
+    EXPECT_DOUBLE(strtod("12.523b3", &endptr), 12.523);
+    EXPECT_CHAR(*endptr, 'b');
+    EXPECT_DOUBLE(strtod("alpha123", &endptr), 0.0);
+    EXPECT_CHAR(*endptr, 'a');
+    EXPECT_DOUBLE(strtod("123e5", NULL), 123e5);
+    EXPECT_DOUBLE(strtod("123e+2", NULL), 123e+2);
+    EXPECT_DOUBLE(strtod("123e-2", NULL), 123e-2);
+    EXPECT_DOUBLE(strtod("123E5", NULL), 123e5);
+    EXPECT_DOUBLE(strtod("123E+2", NULL), 123e+2);
+    EXPECT_DOUBLE(strtod("123E-2", NULL), 123e-2);
+    EXPECT_DOUBLE(strtod("1e-3", NULL), 1e-3);
+    EXPECT_DOUBLE(strtod("123e", &endptr), 123.0);
+    EXPECT_CHAR(*endptr, 'e');
+}
+
+static void check_strtold(void)
+{
+    long double precision = 1e-18L;
+    char *endptr;
+    EXPECT_LDOUBLE(strtold("  85.3", NULL), 85.3L);
+    EXPECT_LDOUBLE(strtold("  85.3", &endptr), 85.3L);
+    EXPECT_CHAR(*endptr, '\0');
+    EXPECT_LDOUBLE(strtold("256.23", NULL), 256.23L);
+    EXPECT_LDOUBLE(strtold("0.001", NULL), 0.001L);
+    EXPECT_LDOUBLE(strtold("+23", NULL), 23.0L);
+    EXPECT_LDOUBLE(strtold(" -375", NULL), -375.0L);
+    EXPECT_LDOUBLE(strtold("0", NULL), 0.0L);
+    EXPECT_LDOUBLE(strtold("+0", NULL), 0.0L);
+    EXPECT_LDOUBLE(strtold("-0", NULL), 0.0L);
+    EXPECT_LDOUBLE(strtold("-1", NULL), -1.0L);
+    EXPECT_LDOUBLE(strtold("123alpha", &endptr), 123.0L);
+    EXPECT_CHAR(*endptr, 'a');
+    EXPECT_LDOUBLE_PREC(strtold("12.523b3", &endptr), 12.523L, precision);
+    EXPECT_CHAR(*endptr, 'b');
+    EXPECT_LDOUBLE(strtold("alpha123", &endptr), 0.0L);
+    EXPECT_CHAR(*endptr, 'a');
+    EXPECT_LDOUBLE(strtold("123e5", NULL), 123e5L);
+    EXPECT_LDOUBLE(strtold("123e+2", NULL), 123e+2L);
+    EXPECT_LDOUBLE(strtold("123e-2", NULL), 123e-2L);
+    EXPECT_LDOUBLE(strtold("123E5", NULL), 123e5L);
+    EXPECT_LDOUBLE(strtold("123E+2", NULL), 123e+2L);
+    EXPECT_LDOUBLE(strtold("123E-2", NULL), 123e-2L);
+    EXPECT_LDOUBLE(strtold("1e-3", NULL), 1e-3L);
+    EXPECT_LDOUBLE(strtold("123e", &endptr), 123L);
+    EXPECT_CHAR(*endptr, 'e');
+}
+
 static void check_stdlib(void)
 {
     check_atoi();
@@ -968,6 +1126,10 @@ static void check_stdlib(void)
     check_strtoll();
     check_strtoul();
     check_strtoull();
+    check_atof();
+    check_strtof();
+    check_strtod();
+    check_strtold();
 }
 
 //------------------------------------------------------------------------------
