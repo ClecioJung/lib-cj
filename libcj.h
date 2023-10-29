@@ -49,6 +49,25 @@ int isxdigit(int c);
 int tolower(int c);
 int toupper(int c);
 
+void *memcpy(void *dst, const void *src, size_t sz);
+char *strcpy(char *dst, const char *src);
+char *strncpy(char *dst, const char *src, size_t sz);
+char *strcat(char *dst, const char *src);
+char *strncat(char *dst, const char *src, size_t sz);
+int memcmp(const void *a, const void *b, size_t sz);
+int strcmp(const char *a, const char *b);
+int strncmp(const char *a, const char *b, size_t sz);
+void *memchr(const void *haystack, int needle, size_t sz);
+char *strchr(const char *str, int c);
+size_t strcspn(const char *str, const char *needles);
+char *strpbrk(const char *str, const char *needles);
+char *strrchr(const char *str, int c);
+char *strstr(const char *haystack, const char *needle);
+char *strstr(const char *haystack, const char *needle);
+char *strtok(char *str, const char *delimiters);
+void *memset(void *ptr, int value, size_t sz);
+size_t strspn(const char *str, const char *needles);
+
 size_t strlen(const char *str);
 
 int sprintf(char *buf, const char *fmt, ...)

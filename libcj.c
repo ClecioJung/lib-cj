@@ -113,7 +113,7 @@ enum Fmt_Flags {
 };
 
 // Parses a integer number using base 8, 10 or 16
-LIBCJ_FN int str_to_int(const char *fmt, const int base, int *const value)
+static int str_to_int(const char *fmt, const int base, int *const value)
 {
     int index = 0;
     int number = 0;
@@ -144,7 +144,7 @@ LIBCJ_FN int str_to_int(const char *fmt, const int base, int *const value)
 }
 
 // Return the amount of characters that would have been written if we had enough size
-LIBCJ_FN int int_to_str(char **buf, size_t *const sz,
+static int int_to_str(char **buf, size_t *const sz,
     const int width, const int precision, const enum Fmt_Flags flags, const int base,
     const bool sign, const intmax_t value)
 {
@@ -202,7 +202,7 @@ LIBCJ_FN int int_to_str(char **buf, size_t *const sz,
 }
 
 // Computes x * base^exponent
-LIBCJ_FN double scale_radix_exp(double x, const int radix, int exponent) {
+static double scale_radix_exp(double x, const int radix, int exponent) {
     if (x == 0.0) {
         return x;
     }
@@ -263,7 +263,7 @@ LIBCJ_FN double rounding(const double value, const int base, const int decimal_p
 }
 
 // Return the amount of characters that would have been written if we had enough size
-LIBCJ_FN int float_to_str(char **buf, size_t *const sz,
+static int float_to_str(char **buf, size_t *const sz,
     const int width, int precision, enum Fmt_Flags flags, const int base,
     double value)
 {
@@ -363,7 +363,7 @@ LIBCJ_FN int float_to_str(char **buf, size_t *const sz,
     return written;
 }
 
-LIBCJ_FN int put_string(char **buf, size_t *const sz, const int width, int precision, const bool left_justify, const char *string)
+static int put_string(char **buf, size_t *const sz, const int width, int precision, const bool left_justify, const char *string)
 {
     int written = 0;
     if (string == NULL) {
@@ -533,7 +533,7 @@ LIBCJ_FN double next_float_arg(va_list args, enum Length_Modifier modifier)
     }
 }
 
-LIBCJ_FN int __vsnprintf(char **buf, size_t *const sz, const char *fmt, va_list args)
+static int __vsnprintf(char **buf, size_t *const sz, const char *fmt, va_list args)
 {
     enum Fmt_Specifier specifier;
     enum Fmt_Flags flags;
@@ -744,25 +744,284 @@ int toupper(int c)
 // STRING.H
 //------------------------------------------------------------------------------
 
-// TODO: memcpy     Copy block of memory
-// TODO: memmove    Move block of memory
-// TODO: strcpy     Copy string
-// TODO: strncpy    Copy characters from string
-// TODO: strcat     Concatenate strings
-// TODO: strncat    Append characters from string
-// TODO: memcmp     Compare two blocks of memory
-// TODO: strcmp     Compare two strings
-// TODO: strncmp    Compare characters of two strings
-// TODO: memchr     Locate character in block of memory
-// TODO: strchr     Locate first occurrence of character in string
-// TODO: strcspn    Get span until character in string
-// TODO: strpbrk    Locate characters in string
-// TODO: strrchr    Locate last occurrence of character in string
-// TODO: strspn     Get span of character set in string
-// TODO: strstr     Locate substring
-// TODO: strtok     Split string into tokens
-// TODO: memset     Fill block of memory
+// Copy block of memory
+void *memcpy(void *dst, const void *src, size_t sz)
+{
+    uint8_t *dst8 = (uint8_t *)dst;
+    uint8_t *src8 = (uint8_t *)src;
+    for (size_t i = 0; i < sz; i++) {
+        dst8[i] = src8[i];
+    }
+    return dst;
+}
 
+// Move block of memory
+void *memmove(void *dst, const void *src, size_t sz)
+{
+    uint8_t *dst8 = (uint8_t *)dst;
+    uint8_t *src8 = (uint8_t *)src;
+    if (src8 > dst8) {
+        for (size_t i = 0; i < sz; i++) {
+            dst8[i] = src8[i];
+        }
+    } else if (src8 < dst8) {
+        for (size_t i = (sz-1); i < sz; i--) {
+            dst8[i] = src8[i];
+        }
+    }
+    return dst;
+}
+
+// Copy string
+char *strcpy(char *dst, const char *src)
+{
+    size_t i = 0;
+    for (; src[i] != '\0'; i++) {
+        dst[i] = src[i];
+    }
+    // Add null-terminator to dst
+    dst[i] = '\0';
+    return dst;
+}
+
+// Copy characters from string
+char *strncpy(char *dst, const char *src, size_t sz)
+{
+    size_t i = 0;
+    for (; (src[i] != '\0') && (i < sz); i++) {
+        dst[i] = src[i];
+    }
+    // If the end of the src is found before num characters have been copied,
+    // destination is padded with zeros until a total of sz characters have
+    // been written to it.
+    for (; i < sz; i++) {
+        dst[i] = '\0';
+    }
+    // No null-character is implicitly appended at the end of destination
+    // if src is longer than sz
+    return dst;
+}
+
+// Concatenate strings
+char *strcat(char *dst, const char *src)
+{
+    size_t i = 0;
+    // Find the end of dst
+    while (dst[i] != '\0') {
+        i++;
+    }
+    // Copy src to the end of dst
+    for (size_t j = 0; src[j] != '\0'; i++, j++) {
+        dst[i] = src[j];
+    }
+    // Add null-terminator to dst
+    dst[i] = '\0';
+    return dst;
+}
+
+// Append characters from string
+char *strncat(char *dst, const char *src, size_t sz)
+{
+    size_t i = 0;
+    // Find the end of dst
+    while (dst[i] != '\0') {
+        i++;
+    }
+    // Copy src to the end of dst
+    for (size_t j = 0; (src[j] != '\0') && (j < sz); i++, j++) {
+        dst[i] = src[j];
+    }
+    // Add null-terminator to dst
+    dst[i] = '\0';
+    return dst;
+}
+
+// Compare two blocks of memory
+int memcmp(const void *a, const void *b, size_t sz)
+{
+    uint8_t *a8 = (uint8_t *)a;
+    uint8_t *b8 = (uint8_t *)b;
+    for (size_t i = 0; i < sz; i++) {
+        int res = (int)(a8[i] - b8[i]);
+        if (res != 0) {
+            return res;
+        }
+    }
+    return 0;
+}
+
+// Compare two strings
+int strcmp(const char *a, const char *b)
+{
+    size_t i = 0;
+    for (; (a[i] != '\0') && (b[i] != '\0'); i++) {
+        int res = (int)(a[i] - b[i]);
+        if (res != 0) {
+            return res;
+        }
+    }
+    return (int)(a[i] - b[i]);
+}
+
+// Compare characters of two strings
+int strncmp(const char *a, const char *b, size_t sz)
+{
+    size_t i = 0;
+    for (; (a[i] != '\0') && (b[i] != '\0') && (i < sz); i++) {
+        int res = (int)(a[i] - b[i]);
+        if (res != 0) {
+            return res;
+        }
+    }
+    if (i == sz) {
+        return 0;
+    }
+    return (int)(a[i] - b[i]);
+}
+
+// Locate character in block of memory
+void *memchr(const void *haystack, int needle, size_t sz)
+{
+    uint8_t *hay8 = (uint8_t *)haystack;
+    uint8_t ndl8 = (uint8_t)needle;
+    for (size_t i = 0; i < sz; i++) {
+        if (hay8[i] == ndl8) {
+            return &hay8[i];
+        }
+    }
+    return NULL;
+}
+
+// Locate first occurrence of character in string
+char *strchr(const char *str, int c)
+{
+    for (size_t i = 0; str[i] != '\0'; i++) {
+        if (str[i] == (char)c) {
+            return (char *)&str[i];
+        }
+    }
+    return NULL;
+}
+
+// Get span until character in string
+size_t strcspn(const char *str, const char *needles)
+{
+    size_t i = 0;
+    for (; str[i] != '\0'; i++) {
+        for (size_t j = 0; needles[j] != '\0'; j++) {
+            if (str[i] == needles[j]) {
+                return i;
+            }
+        }
+    }
+    return i;
+}
+
+// Locate characters in string
+char *strpbrk(const char *str, const char *needles)
+{
+    size_t i = 0;
+    for (; str[i] != '\0'; i++) {
+        for (size_t j = 0; needles[j] != '\0'; j++) {
+            if (str[i] == needles[j]) {
+                return (char *)&str[i];
+            }
+        }
+    }
+    return NULL;
+}
+
+// Locate last occurrence of character in string
+char *strrchr(const char *str, int c)
+{
+    // Find the end of the string
+    size_t i = 0;
+    while (str[i] != '\0') {
+        i++;
+    }
+    // The terminating null-character is considered part of the C string.
+    // Therefore, it can also be located to retrieve a pointer to the end of a string.
+    for (; i != SIZE_MAX; i--) {
+        if (str[i] == c) {
+            return (char *)&str[i];
+        }
+    }
+    return NULL;
+}
+
+// Get span of character set in string
+size_t strspn(const char *str, const char *needles)
+{
+    size_t i = 0;
+    for (; str[i] != '\0'; i++) {
+        bool found_any = false;
+        for (size_t j = 0; needles[j] != '\0'; j++) {
+            if (str[i] == needles[j]) {
+                found_any = true;
+            }
+        }
+        if (!found_any) {
+            return i;
+        }
+    }
+    return i;
+}
+
+// Locate substring
+char *strstr(const char *haystack, const char *needle)
+{
+    for (size_t i = 0; haystack[i] != '\0'; i++) {
+        size_t j = 0;
+        for (; needle[j] != '\0'; j++) {
+            if (haystack[i+j] != needle[j]) {
+                break;
+            }
+        }
+        if (needle[j] == '\0') {
+            return (char *)&haystack[i];
+        }
+    }
+    return NULL;
+}
+
+// Split string into tokens
+char *strtok(char *str, const char *delimiters)
+{
+    static THREAD_LOCAL char *old_str = NULL;
+    if (str == NULL) {
+        // Use the saved pointer
+        str = old_str;
+    }
+    if (str == NULL) {
+        return NULL;
+    }
+    // Find the beginning of the token
+    char *const tok_begin = str + strspn(str, delimiters);
+    if (*tok_begin == '\0') {
+        // Didn't found any token
+        old_str = NULL;
+        return NULL;
+    }
+    // Find the end of the token
+    char *const tok_end = strpbrk(tok_begin, delimiters);
+    if (tok_end != NULL) {
+        old_str = *tok_end != '\0' ? (tok_end+1) : NULL;
+        *tok_end = '\0';
+    }
+    return tok_begin;
+}
+
+// Fill block of memory
+void *memset(void *ptr, int value, size_t sz)
+{
+    uint8_t *ptr8 = (uint8_t *)ptr;
+    for (size_t i = 0; i < sz; i++) {
+        ptr8[i] = (uint8_t)value;
+    }
+    return ptr;
+}
+
+// Get string length
 size_t strlen(const char *str)
 {
     size_t i = 0;

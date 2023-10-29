@@ -12,7 +12,10 @@ CFLAGS := -W -Wall -Wextra -pedantic \
 
 # List of functions linked from libcj or libc
 FUNCTIONS := tolower toupper \
-             strlen \
+             memcpy memmove strcpy strncpy strcat strncat \
+			 memcmp strcmp strncmp \
+			 memchr strchr strcspn strpbrk strchr strspn \
+			 strstr strtok memset strlen \
              snprintf
 
 # Function that uses nm to check if a function name (2nd argument) is undefined in a object file (1st argument)
