@@ -64,9 +64,6 @@
 // Local buffer size for functions that handle strings
 #define LOCAL_BUFFER_SIZE 32 // TODO: Check for boundaries
 
-// TODO: Implement some kind of generics in C using preprocessor
-// TODO: Try to make it fast and optimized
-
 #define VALUE_TO_CHAR(value, uppercase) \
     (((value) < 10) ? ((value) + '0') : (value - 10 + ((uppercase) ? 'A' : 'a')))
 
@@ -93,8 +90,8 @@
 // The length modifiers j, z and t are not implemented
 enum Length_Modifier {
     Modifier_None,
-    Modifier_char, Modifier_short, Modifier_long, Modifier_longlong,
-    Modifier_longdouble
+    Modifier_char, Modifier_short, Modifier_long, Modifier_llong,
+    Modifier_ldouble
 };
 
 enum Fmt_Specifier {
@@ -187,10 +184,10 @@ enum Fmt_Flags {
 // Some sort of generics in C using the preprocessor
 CREATE_STR_TO_INT_FN(str_to_int, int, 0, INT_MAX, INT_MIN)
 CREATE_STR_TO_INT_FN(str_to_long, long, 0L, LONG_MAX, LONG_MIN)
-CREATE_STR_TO_INT_FN(str_to_longlong, long long, 0LL, LLONG_MAX, LLONG_MIN)
+CREATE_STR_TO_INT_FN(str_to_llong, long long, 0LL, LLONG_MAX, LLONG_MIN)
 CREATE_STR_TO_INT_FN(str_to_uint, unsigned int, (unsigned int)0, UINT_MAX, (unsigned int)0)
 CREATE_STR_TO_INT_FN(str_to_ulong, unsigned long, 0UL, ULONG_MAX, 0UL)
-CREATE_STR_TO_INT_FN(str_to_ulonglong, unsigned long long, 0ULL, ULLONG_MAX, 0ULL)
+CREATE_STR_TO_INT_FN(str_to_ullong, unsigned long long, 0ULL, ULLONG_MAX, 0ULL)
 
 // Return the amount of characters that would have been written if we had enough size
 static int int_to_str(char **buf, size_t *const sz,
@@ -502,13 +499,13 @@ LIBCJ_FN int parse_fmt_specifier(const char *const fmt, enum Fmt_Specifier *cons
         index++;
         if (fmt[index] == 'l') {
             index++;
-            *modifier = Modifier_longlong;
+            *modifier = Modifier_llong;
         } else {
             *modifier = Modifier_long;
         }
     } else if (fmt[index] == 'L') {
         index++;
-        *modifier = Modifier_longdouble;
+        *modifier = Modifier_ldouble;
     }
     // Parse the format specifier
     switch (fmt[index]) {
@@ -546,12 +543,12 @@ LIBCJ_FN int parse_fmt_specifier(const char *const fmt, enum Fmt_Specifier *cons
 LIBCJ_FN intmax_t next_int_arg(va_list args, enum Length_Modifier modifier)
 {
     switch (modifier) {
-    case Modifier_char: return (char)va_arg(args, int);
+    case Modifier_char:  return (char)va_arg(args, int);
     case Modifier_short: return (short)va_arg(args, int);
-    case Modifier_long: return va_arg(args, long);
-    case Modifier_longlong: return va_arg(args, long long);
+    case Modifier_long:  return va_arg(args, long);
+    case Modifier_llong: return va_arg(args, long long);
     case Modifier_None:
-    case Modifier_longdouble:
+    case Modifier_ldouble:
     default: return va_arg(args, int);
     }
 }
@@ -559,12 +556,12 @@ LIBCJ_FN intmax_t next_int_arg(va_list args, enum Length_Modifier modifier)
 LIBCJ_FN intmax_t next_uint_arg(va_list args, enum Length_Modifier modifier)
 {
     switch (modifier) {
-    case Modifier_char: return (unsigned char)va_arg(args, unsigned int);
+    case Modifier_char:  return (unsigned char)va_arg(args, unsigned int);
     case Modifier_short: return (unsigned short)va_arg(args, unsigned int);
-    case Modifier_long: return (intmax_t)va_arg(args, unsigned long);
-    case Modifier_longlong: return (intmax_t)va_arg(args, unsigned long long);
+    case Modifier_long:  return (intmax_t)va_arg(args, unsigned long);
+    case Modifier_llong: return (intmax_t)va_arg(args, unsigned long long);
     case Modifier_None:
-    case Modifier_longdouble:
+    case Modifier_ldouble:
     default: return va_arg(args, unsigned int);
     }
 }
@@ -572,12 +569,12 @@ LIBCJ_FN intmax_t next_uint_arg(va_list args, enum Length_Modifier modifier)
 LIBCJ_FN double next_float_arg(va_list args, enum Length_Modifier modifier)
 {
     switch (modifier) {
-    case Modifier_longdouble: return (double)va_arg(args, long double);
+    case Modifier_ldouble: return (double)va_arg(args, long double);
     case Modifier_None:
     case Modifier_char:
     case Modifier_short:
     case Modifier_long:
-    case Modifier_longlong:
+    case Modifier_llong:
     default: return va_arg(args, double);
     }
 }
@@ -1098,7 +1095,7 @@ size_t strlen(const char *str)
 
 CREATE_ATOI_FN(atoi, int, str_to_int)
 CREATE_ATOI_FN(atol, long, str_to_long)
-CREATE_ATOI_FN(atoll, long long, str_to_longlong)
+CREATE_ATOI_FN(atoll, long long, str_to_llong)
 
 // Convert string to integer
 #define CREATE_STRTOI_FN(name, type, fn) \
@@ -1117,10 +1114,10 @@ CREATE_ATOI_FN(atoll, long long, str_to_longlong)
 
 CREATE_STRTOI_FN(strtoi, int, str_to_int)
 CREATE_STRTOI_FN(strtol, long, str_to_long)
-CREATE_STRTOI_FN(strtoll, long long, str_to_longlong)
+CREATE_STRTOI_FN(strtoll, long long, str_to_llong)
 CREATE_STRTOI_FN(strtou, unsigned int, str_to_uint)
 CREATE_STRTOI_FN(strtoul, unsigned long, str_to_ulong)
-CREATE_STRTOI_FN(strtoull, unsigned long long, str_to_ulonglong)
+CREATE_STRTOI_FN(strtoull, unsigned long long, str_to_ullong)
 
 // TODO: atof       Convert string to double
 // TODO: strtof     Convert string to float
