@@ -50,6 +50,7 @@ int tolower(int c);
 int toupper(int c);
 
 void *memcpy(void *dst, const void *src, size_t sz);
+void *memmove(void *dst, const void *src, size_t sz);
 char *strcpy(char *dst, const char *src);
 char *strncpy(char *dst, const char *src, size_t sz);
 char *strcat(char *dst, const char *src);
@@ -64,11 +65,20 @@ char *strpbrk(const char *str, const char *needles);
 char *strrchr(const char *str, int c);
 char *strstr(const char *haystack, const char *needle);
 char *strstr(const char *haystack, const char *needle);
+size_t strspn(const char *str, const char *needles);
 char *strtok(char *str, const char *delimiters);
 void *memset(void *ptr, int value, size_t sz);
-size_t strspn(const char *str, const char *needles);
-
 size_t strlen(const char *str);
+
+int atoi(const char *str);
+long atol(const char *str);
+long long atoll(const char *str);
+int strtoi(const char *str, char **endptr, int base); // This function isn't defined by standard-C
+long strtol(const char *str, char **endptr, int base);
+long long strtoll(const char *str, char **endptr, int base);
+unsigned int strtou(const char *str, char **endptr, int base); // This function isn't defined by standard-C
+unsigned long strtoul(const char *str, char **endptr, int base);
+unsigned long long strtoull(const char *str, char **endptr, int base);
 
 int sprintf(char *buf, const char *fmt, ...)
     __attribute__((format(printf, 2, 3)));

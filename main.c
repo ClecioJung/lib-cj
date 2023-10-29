@@ -28,12 +28,12 @@
 #include "libcj.h"
 #else // USE_LIB_CJ
 #include <ctype.h>
+#include <string.h>
 #endif // USE_LIB_CJ
 
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
 //------------------------------------------------------------------------------
 // TEST MACROS AND FUNCTIONS
@@ -41,7 +41,68 @@
 
 // TODO: Introduce a function to escape special chars
 #define EXPECT_STR(value, to_equal) expect_str(__FILE__, __LINE__, value, to_equal)
-static void expect_str(const char *const file, const unsigned int line, const char *const value, const char *const to_equal)
+#define EXPECT_SIZED_STR(value, to_equal, size) expect_sized_str(__FILE__, __LINE__, value, to_equal, size)
+#define EXPECT_TRUE(value) expect_true(__FILE__, __LINE__, value)
+#define EXPECT_FALSE(value) expect_false(__FILE__, __LINE__, value)
+
+#define EXPECT_PTR(value, to_equal) expect_ptr(__FILE__, __LINE__, value, to_equal)
+#define EXPECT_CHAR(value, to_equal) expect_char(__FILE__, __LINE__, value, to_equal)
+#define EXPECT_INT(value, to_equal) expect_int(__FILE__, __LINE__, value, to_equal)
+#define EXPECT_LONG(value, to_equal) expect_long(__FILE__, __LINE__, value, to_equal)
+#define EXPECT_LLONG(value, to_equal) expect_longlong(__FILE__, __LINE__, value, to_equal)
+#define EXPECT_UCHAR(value, to_equal) expect_uchar(__FILE__, __LINE__, value, to_equal)
+#define EXPECT_UINT(value, to_equal) expect_uint(__FILE__, __LINE__, value, to_equal)
+#define EXPECT_ULONG(value, to_equal) expect_ulong(__FILE__, __LINE__, value, to_equal)
+#define EXPECT_ULLONG(value, to_equal) expect_ulonglong(__FILE__, __LINE__, value, to_equal)
+#define EXPECT_SIZE(value, to_equal) expect_size(__FILE__, __LINE__, value, to_equal)
+
+#define EXPECT_PTR_NOT(value, to_equal) expect_ptr_not(__FILE__, __LINE__, value, to_equal)
+#define EXPECT_CHAR_NOT(value, to_equal) expect_char_not(__FILE__, __LINE__, value, to_equal)
+#define EXPECT_INT_NOT(value, to_equal) expect_int_not(__FILE__, __LINE__, value, to_equal)
+#define EXPECT_LONG_NOT(value, to_equal) expect_long_not(__FILE__, __LINE__, value, to_equal)
+#define EXPECT_LLONG_NOT(value, to_equal) expect_longlong_not(__FILE__, __LINE__, value, to_equal)
+#define EXPECT_UCHARNOT(value, to_equal) expect_uchar_not(__FILE__, __LINE__, value, to_equal)
+#define EXPECT_UINTNOT(value, to_equal) expect_uint_not(__FILE__, __LINE__, value, to_equal)
+#define EXPECT_ULONGNOT(value, to_equal) expect_ulong_not(__FILE__, __LINE__, value, to_equal)
+#define EXPECT_ULLONGNOT(value, to_equal) expect_ulonglong_not(__FILE__, __LINE__, value, to_equal)
+#define EXPECT_SIZE_NOT(value, to_equal) expect_size_not(__FILE__, __LINE__, value, to_equal)
+
+#define CREATE_EXPECT_INT_FN(name, type, fmt) \
+    void name( \
+        const char *const file, const unsigned int line, \
+        const type value, const type to_equal) \
+    { \
+        if (value != to_equal) { \
+            fprintf(stderr, "%s:%u [TEST FAILED] expected " # type "\n    " fmt "\n  but got\n    " fmt "\n", \
+                file, line, to_equal, value); \
+            exit(EXIT_FAILURE); \
+        } \
+    } \
+    void name ## _not( \
+        const char *const file, const unsigned int line, \
+        const type value, const type to_equal) \
+    { \
+        if (value == to_equal) { \
+            fprintf(stderr, "%s:%u [TEST FAILED] expected " # type "to be different from\n    " fmt "\n  but got\n    " fmt "\n", \
+                file, line, to_equal, value); \
+            exit(EXIT_FAILURE); \
+        } \
+    }
+
+CREATE_EXPECT_INT_FN(expect_ptr, void *, "%p")
+CREATE_EXPECT_INT_FN(expect_int, int, "%d")
+CREATE_EXPECT_INT_FN(expect_char, char, "%hhd")
+CREATE_EXPECT_INT_FN(expect_short, short, "%hd")
+CREATE_EXPECT_INT_FN(expect_long, long, "%ld")
+CREATE_EXPECT_INT_FN(expect_longlong, long long, "%lld")
+CREATE_EXPECT_INT_FN(expect_uint, unsigned int, "%u")
+CREATE_EXPECT_INT_FN(expect_uchar, unsigned char, "%hhu")
+CREATE_EXPECT_INT_FN(expect_ushort, unsigned short, "%hu")
+CREATE_EXPECT_INT_FN(expect_ulong, unsigned long, "%lu")
+CREATE_EXPECT_INT_FN(expect_ulonglong, unsigned long long, "%llu")
+CREATE_EXPECT_INT_FN(expect_size, size_t, "%zu")
+
+void expect_str(const char *const file, const unsigned int line, const char *const value, const char *const to_equal)
 {
     if (strcmp(value, to_equal) != 0) {
         fprintf(stderr, "%s:%u [TEST FAILED] expected string\n    \"%s\"\n  but got\n    \"%s\"\n", file, line, to_equal, value);
@@ -49,8 +110,7 @@ static void expect_str(const char *const file, const unsigned int line, const ch
     }
 }
 
-#define EXPECT_SIZED_STR(value, to_equal, size) expect_sized_str(__FILE__, __LINE__, value, to_equal, size)
-static void expect_sized_str(const char *const file, const unsigned int line, const char *const value, const char *const to_equal, const size_t size)
+void expect_sized_str(const char *const file, const unsigned int line, const char *const value, const char *const to_equal, const size_t size)
 {
     if (strncmp(value, to_equal, size) != 0) {
         fprintf(stderr, "%s:%u [TEST FAILED] expected sized string\n    \"%.*s\"\n  but got\n    \"%.*s\"\n", file, line, size, to_equal, size, value);
@@ -58,53 +118,7 @@ static void expect_sized_str(const char *const file, const unsigned int line, co
     }
 }
 
-#define EXPECT_PTR(value, to_equal) expect_ptr(__FILE__, __LINE__, value, to_equal)
-static void expect_ptr(const char *const file, const unsigned int line, const void *value, const void *to_equal)
-{
-    if (value != to_equal) {
-        fprintf(stderr, "%s:%u [TEST FAILED] expected pointer\n    %p\n  but got\n    %p\n", file, line, to_equal, value);
-        exit(EXIT_FAILURE);
-    }
-}
-
-#define EXPECT_INT(value, to_equal) expect_int(__FILE__, __LINE__, value, to_equal)
-static void expect_int(const char *const file, const unsigned int line, const int value, const int to_equal)
-{
-    if (value != to_equal) {
-        fprintf(stderr, "%s:%u [TEST FAILED] expected integer\n    %d\n  but got\n    %d\n", file, line, to_equal, value);
-        exit(EXIT_FAILURE);
-    }
-}
-
-#define EXPECT_SIZE(value, to_equal) expect_size(__FILE__, __LINE__, value, to_equal)
-static void expect_size(const char *const file, const unsigned int line, const size_t value, const size_t to_equal)
-{
-    if (value != to_equal) {
-        fprintf(stderr, "%s:%u [TEST FAILED] expected size\n    %zu\n  but got\n    %zu\n", file, line, to_equal, value);
-        exit(EXIT_FAILURE);
-    }
-}
-
-#define EXPECT_CHAR(value, to_equal) expect_char(__FILE__, __LINE__, value, to_equal)
-static void expect_char(const char *const file, const unsigned int line, const char value, const char to_equal)
-{
-    if (value != to_equal) {
-        fprintf(stderr, "%s:%u [TEST FAILED] expected char\n    %hhd\n  but got\n    %hhd\n", file, line, to_equal, value);
-        exit(EXIT_FAILURE);
-    }
-}
-
-#define EXPECT_CHAR_NOT(value, to_equal) expect_char_not(__FILE__, __LINE__, value, to_equal)
-static void expect_char_not(const char *const file, const unsigned int line, const char value, const char to_equal)
-{
-    if (value == to_equal) {
-        fprintf(stderr, "%s:%u [TEST FAILED] expected char to be different from\n    %hhd\n  but got\n    %hhd\n", file, line, to_equal, value);
-        exit(EXIT_FAILURE);
-    }
-}
-
-#define EXPECT_TRUE(value) expect_true(__FILE__, __LINE__, value)
-static void expect_true(const char *const file, const unsigned int line, const int value)
+void expect_true(const char *const file, const unsigned int line, const int value)
 {
     if (value == 0) {
         fprintf(stderr, "%s:%u [TEST FAILED] expected true but got\n    %d\n", file, line, value);
@@ -112,8 +126,7 @@ static void expect_true(const char *const file, const unsigned int line, const i
     }
 }
 
-#define EXPECT_FALSE(value) expect_false(__FILE__, __LINE__, value)
-static void expect_false(const char *const file, const unsigned int line, const int value)
+void expect_false(const char *const file, const unsigned int line, const int value)
 {
     if (value != 0) {
         fprintf(stderr, "%s:%u [TEST FAILED] expected false but got\n    %d\n", file, line, value);
@@ -555,6 +568,408 @@ static void check_cstring(void)
 // STDLIB.H
 //------------------------------------------------------------------------------
 
+static void check_atoi(void)
+{
+    EXPECT_INT(atoi("  85"), 85);
+    EXPECT_INT(atoi("256"), 256);
+    EXPECT_INT(atoi("+23"), 23);
+    EXPECT_INT(atoi(" -375"), -375);
+    EXPECT_INT(atoi("0"), 0);
+    EXPECT_INT(atoi("+0"), 0);
+    EXPECT_INT(atoi("-0"), 0);
+    EXPECT_INT(atoi("-1"), -1);
+    EXPECT_INT(atoi("123alpha"), 123);
+    EXPECT_INT(atoi("12b3"), 12);
+    EXPECT_INT(atoi("alpha123"), 0);
+    EXPECT_INT(atoi("2147483647"), INT_MAX);
+    EXPECT_INT(atoi("2147483646"), 2147483646);
+    EXPECT_INT(atoi("-2147483648"), INT_MIN);
+    EXPECT_INT(atoi("-2147483647"), -2147483647);
+}
+
+static void check_atol(void)
+{
+    EXPECT_LONG(atol("  85"), 85L);
+    EXPECT_LONG(atol("256"), 256L);
+    EXPECT_LONG(atol("+23"), 23L);
+    EXPECT_LONG(atol(" -375"), -375L);
+    EXPECT_LONG(atol("0"), 0L);
+    EXPECT_LONG(atol("+0"), 0L);
+    EXPECT_LONG(atol("-0"), 0L);
+    EXPECT_LONG(atol("-1"), -1L);
+    EXPECT_LONG(atol("123alpha"), 123L);
+    EXPECT_LONG(atol("12b3"), 12L);
+    EXPECT_LONG(atol("alpha123"), 0L);
+    EXPECT_LONG(atol("9223372036854775807"), LONG_MAX);
+    EXPECT_LONG(atol("9223372036854775806"), 9223372036854775806L);
+    EXPECT_LONG(atol("-9223372036854775808"), LONG_MIN);
+    EXPECT_LONG(atol("-9223372036854775807"), -9223372036854775807L);
+}
+
+static void check_atoll(void)
+{
+    EXPECT_LLONG(atoll("  85"), 85LL);
+    EXPECT_LLONG(atoll("256"), 256LL);
+    EXPECT_LLONG(atoll("+23"), 23LL);
+    EXPECT_LLONG(atoll(" -375"), -375LL);
+    EXPECT_LLONG(atoll("0"), 0LL);
+    EXPECT_LLONG(atoll("+0"), 0LL);
+    EXPECT_LLONG(atoll("-0"), 0LL);
+    EXPECT_LLONG(atoll("-1"), -1LL);
+    EXPECT_LLONG(atoll("123alpha"), 123LL);
+    EXPECT_LLONG(atoll("12b3"), 12LL);
+    EXPECT_LLONG(atoll("alpha123"), 0LL);
+    EXPECT_LLONG(atoll("9223372036854775807"), LLONG_MAX);
+    EXPECT_LLONG(atoll("9223372036854775806"), 9223372036854775806LL);
+    EXPECT_LLONG(atoll("-9223372036854775808"), LLONG_MIN);
+    EXPECT_LLONG(atoll("-9223372036854775807"), -9223372036854775807LL);
+}
+
+static void check_strtol(void)
+{
+    char *endptr;
+    EXPECT_LONG(strtol("  85", NULL, 10), 85L);
+    EXPECT_LONG(strtol("  85", &endptr, 10), 85L);
+    EXPECT_CHAR(*endptr, '\0');
+    EXPECT_LONG(strtol("256", NULL, 10), 256L);
+    EXPECT_LONG(strtol("+23", NULL, 10), 23L);
+    EXPECT_LONG(strtol(" -375", NULL, 10), -375L);
+    EXPECT_LONG(strtol("0", NULL, 10), 0L);
+    EXPECT_LONG(strtol("+0", NULL, 10), 0L);
+    EXPECT_LONG(strtol("-0", NULL, 10), 0L);
+    EXPECT_LONG(strtol("-1", NULL, 10), -1L);
+    EXPECT_LONG(strtol("123alpha", &endptr, 10), 123L);
+    EXPECT_CHAR(*endptr, 'a');
+    EXPECT_LONG(strtol("12b3", &endptr, 10), 12L);
+    EXPECT_CHAR(*endptr, 'b');
+    EXPECT_LONG(strtol("alpha123", &endptr, 10), 0L);
+    EXPECT_CHAR(*endptr, 'a');
+    EXPECT_LONG(strtol("9223372036854775807", NULL, 10), LONG_MAX);
+    EXPECT_LONG(strtol("9223372036854775806", NULL, 10), 9223372036854775806L);
+    EXPECT_LONG(strtol("-9223372036854775808", NULL, 10), LONG_MIN);
+    EXPECT_LONG(strtol("-9223372036854775807", NULL, 10), -9223372036854775807L);
+    // Octal numbers
+    EXPECT_LONG(strtol("  125", NULL, 8), 85L);
+    EXPECT_LONG(strtol("  125", &endptr, 8), 85L);
+    EXPECT_CHAR(*endptr, '\0');
+    EXPECT_LONG(strtol("1238", &endptr, 8), 83L);
+    EXPECT_CHAR(*endptr, '8');
+    EXPECT_LONG(strtol("777777777777777777777", NULL, 8), LONG_MAX);
+    EXPECT_LONG(strtol("777777777777777777776", NULL, 8), 9223372036854775806L);
+    EXPECT_LONG(strtol("-1000000000000000000000", NULL, 8), LONG_MIN);
+    EXPECT_LONG(strtol("-777777777777777777777", NULL, 8), -9223372036854775807L);
+    EXPECT_LONG(strtol("0777777777777777777777", NULL, 8), LONG_MAX);
+    EXPECT_LONG(strtol("073", NULL, 8), 59L);
+    // Hexadecimal numbers
+    EXPECT_LONG(strtol("  55", NULL, 16), 85L);
+    EXPECT_LONG(strtol("  55", &endptr, 16), 85L);
+    EXPECT_CHAR(*endptr, '\0');
+    EXPECT_LONG(strtol("123g", &endptr, 16), 291L);
+    EXPECT_CHAR(*endptr, 'g');
+    EXPECT_LONG(strtol("7fffffffffffffff", NULL, 16), LONG_MAX);
+    EXPECT_LONG(strtol("7ffffffffffffffe", NULL, 16), 9223372036854775806L);
+    EXPECT_LONG(strtol("-8000000000000000", NULL, 16), LONG_MIN);
+    EXPECT_LONG(strtol("-7fffffffffffffff", NULL, 16), -9223372036854775807L);
+    EXPECT_LONG(strtol("0x7f0", NULL, 16), 2032);
+    EXPECT_LONG(strtol("0x7fffffffffffffff", NULL, 16), LONG_MAX);
+    // Informing zero base
+    EXPECT_LONG(strtol("  85", NULL, 0), 85L);
+    EXPECT_LONG(strtol("  85", &endptr, 0), 85L);
+    EXPECT_CHAR(*endptr, '\0');
+    EXPECT_LONG(strtol("256", NULL, 0), 256L);
+    EXPECT_LONG(strtol("+23", NULL, 0), 23L);
+    EXPECT_LONG(strtol(" -375", NULL, 0), -375L);
+    EXPECT_LONG(strtol("0", NULL, 0), 0L);
+    EXPECT_LONG(strtol("+0", NULL, 0), 0L);
+    EXPECT_LONG(strtol("-0", NULL, 0), 0L);
+    EXPECT_LONG(strtol("-1", NULL, 0), -1L);
+    EXPECT_LONG(strtol("123alpha", &endptr, 0), 123L);
+    EXPECT_CHAR(*endptr, 'a');
+    EXPECT_LONG(strtol("12b3", &endptr, 0), 12L);
+    EXPECT_CHAR(*endptr, 'b');
+    EXPECT_LONG(strtol("alpha123", &endptr, 0), 0L);
+    EXPECT_CHAR(*endptr, 'a');
+    EXPECT_LONG(strtol("9223372036854775807", NULL, 0), LONG_MAX);
+    EXPECT_LONG(strtol("9223372036854775806", NULL, 0), 9223372036854775806L);
+    EXPECT_LONG(strtol("-9223372036854775808", NULL, 0), LONG_MIN);
+    EXPECT_LONG(strtol("-9223372036854775807", NULL, 0), -9223372036854775807L);
+    EXPECT_LONG(strtol("0x123alpha", &endptr, 0), 4666L);
+    EXPECT_CHAR(*endptr, 'l');
+    EXPECT_LONG(strtol("01238lpha", &endptr, 0), 83L);
+    EXPECT_CHAR(*endptr, '8');
+    // Custom base
+    EXPECT_LONG(strtol("  zzz", NULL, 36), 46655L);
+    EXPECT_LONG(strtol("  zzz]", &endptr, 36), 46655L);
+    EXPECT_CHAR(*endptr, ']');
+    EXPECT_LONG(strtol("  hh", NULL, 30), 527L);
+    EXPECT_LONG(strtol("  hhz", &endptr, 30), 527L);
+    EXPECT_CHAR(*endptr, 'z');
+    // Invalid base
+    EXPECT_LONG(strtol("0", NULL, 1), 0L);
+    EXPECT_LONG(strtol("1", NULL, 1), 0L);
+    EXPECT_LONG(strtol("123", NULL, 42), 0L);
+    EXPECT_LONG(strtol("zzz", NULL, 42), 0L);
+    EXPECT_LONG(strtol("0123", NULL, -2), 0L);
+}
+
+static void check_strtoll(void)
+{
+    char *endptr;
+    EXPECT_LLONG(strtoll("  85", NULL, 10), 85LL);
+    EXPECT_LLONG(strtoll("  85", &endptr, 10), 85LL);
+    EXPECT_CHAR(*endptr, '\0');
+    EXPECT_LLONG(strtoll("256", NULL, 10), 256LL);
+    EXPECT_LLONG(strtoll("+23", NULL, 10), 23LL);
+    EXPECT_LLONG(strtoll(" -375", NULL, 10), -375LL);
+    EXPECT_LLONG(strtoll("0", NULL, 10), 0LL);
+    EXPECT_LLONG(strtoll("+0", NULL, 10), 0LL);
+    EXPECT_LLONG(strtoll("-0", NULL, 10), 0LL);
+    EXPECT_LLONG(strtoll("-1", NULL, 10), -1LL);
+    EXPECT_LLONG(strtoll("123alpha", &endptr, 10), 123LL);
+    EXPECT_CHAR(*endptr, 'a');
+    EXPECT_LLONG(strtoll("12b3", &endptr, 10), 12LL);
+    EXPECT_CHAR(*endptr, 'b');
+    EXPECT_LLONG(strtoll("alpha123", &endptr, 10), 0LL);
+    EXPECT_CHAR(*endptr, 'a');
+    EXPECT_LLONG(strtoll("9223372036854775807", NULL, 10), LLONG_MAX);
+    EXPECT_LLONG(strtoll("9223372036854775806", NULL, 10), 9223372036854775806LL);
+    EXPECT_LLONG(strtoll("-9223372036854775808", NULL, 10), LLONG_MIN);
+    EXPECT_LLONG(strtoll("-9223372036854775807", NULL, 10), -9223372036854775807LL);
+    // Octal numbers
+    EXPECT_LLONG(strtoll("  125", NULL, 8), 85LL);
+    EXPECT_LLONG(strtoll("  125", &endptr, 8), 85LL);
+    EXPECT_CHAR(*endptr, '\0');
+    EXPECT_LLONG(strtoll("1238", &endptr, 8), 83LL);
+    EXPECT_CHAR(*endptr, '8');
+    EXPECT_LLONG(strtoll("777777777777777777777", NULL, 8), LLONG_MAX);
+    EXPECT_LLONG(strtoll("777777777777777777776", NULL, 8), 9223372036854775806LL);
+    EXPECT_LLONG(strtoll("-1000000000000000000000", NULL, 8), LLONG_MIN);
+    EXPECT_LLONG(strtoll("-777777777777777777777", NULL, 8), -9223372036854775807LL);
+    EXPECT_LLONG(strtoll("0777777777777777777777", NULL, 8), LLONG_MAX);
+    EXPECT_LLONG(strtoll("073", NULL, 8), 59LL);
+    // Hexadecimal numbers
+    EXPECT_LLONG(strtoll("  55", NULL, 16), 85LL);
+    EXPECT_LLONG(strtoll("  55", &endptr, 16), 85LL);
+    EXPECT_CHAR(*endptr, '\0');
+    EXPECT_LLONG(strtoll("123g", &endptr, 16), 291LL);
+    EXPECT_CHAR(*endptr, 'g');
+    EXPECT_LLONG(strtoll("7fffffffffffffff", NULL, 16), LLONG_MAX);
+    EXPECT_LLONG(strtoll("7ffffffffffffffe", NULL, 16), 9223372036854775806LL);
+    EXPECT_LLONG(strtoll("-8000000000000000", NULL, 16), LLONG_MIN);
+    EXPECT_LLONG(strtoll("-7fffffffffffffff", NULL, 16), -9223372036854775807LL);
+    EXPECT_LLONG(strtoll("0x7f0", NULL, 16), 2032);
+    EXPECT_LLONG(strtoll("0x7fffffffffffffff", NULL, 16), LLONG_MAX);
+    // Informing zero base
+    EXPECT_LLONG(strtoll("  85", NULL, 0), 85LL);
+    EXPECT_LLONG(strtoll("  85", &endptr, 0), 85LL);
+    EXPECT_CHAR(*endptr, '\0');
+    EXPECT_LLONG(strtoll("256", NULL, 0), 256LL);
+    EXPECT_LLONG(strtoll("+23", NULL, 0), 23LL);
+    EXPECT_LLONG(strtoll(" -375", NULL, 0), -375LL);
+    EXPECT_LLONG(strtoll("0", NULL, 0), 0LL);
+    EXPECT_LLONG(strtoll("+0", NULL, 0), 0LL);
+    EXPECT_LLONG(strtoll("-0", NULL, 0), 0LL);
+    EXPECT_LLONG(strtoll("-1", NULL, 0), -1LL);
+    EXPECT_LLONG(strtoll("123alpha", &endptr, 0), 123LL);
+    EXPECT_CHAR(*endptr, 'a');
+    EXPECT_LLONG(strtoll("12b3", &endptr, 0), 12LL);
+    EXPECT_CHAR(*endptr, 'b');
+    EXPECT_LLONG(strtoll("alpha123", &endptr, 0), 0LL);
+    EXPECT_CHAR(*endptr, 'a');
+    EXPECT_LLONG(strtoll("9223372036854775807", NULL, 0), LLONG_MAX);
+    EXPECT_LLONG(strtoll("9223372036854775806", NULL, 0), 9223372036854775806LL);
+    EXPECT_LLONG(strtoll("-9223372036854775808", NULL, 0), LLONG_MIN);
+    EXPECT_LLONG(strtoll("-9223372036854775807", NULL, 0), -9223372036854775807LL);
+    EXPECT_LLONG(strtoll("0x123alpha", &endptr, 0), 4666LL);
+    EXPECT_CHAR(*endptr, 'l');
+    EXPECT_LLONG(strtoll("01238lpha", &endptr, 0), 83LL);
+    EXPECT_CHAR(*endptr, '8');
+    // Custom base
+    EXPECT_LLONG(strtoll("  zzz", NULL, 36), 46655LL);
+    EXPECT_LLONG(strtoll("  zzz]", &endptr, 36), 46655LL);
+    EXPECT_CHAR(*endptr, ']');
+    EXPECT_LLONG(strtoll("  hh", NULL, 30), 527LL);
+    EXPECT_LLONG(strtoll("  hhz", &endptr, 30), 527LL);
+    EXPECT_CHAR(*endptr, 'z');
+    // Invalid base
+    EXPECT_LLONG(strtoll("0", NULL, 1), 0LL);
+    EXPECT_LLONG(strtoll("1", NULL, 1), 0LL);
+    EXPECT_LLONG(strtoll("123", NULL, 42), 0LL);
+    EXPECT_LLONG(strtoll("zzz", NULL, 42), 0LL);
+    EXPECT_LLONG(strtoll("0123", NULL, -2), 0LL);
+}
+
+static void check_strtoul(void)
+{
+    char *endptr;
+    EXPECT_ULONG(strtoul("  85", NULL, 10), 85UL);
+    EXPECT_ULONG(strtoul("  85", &endptr, 10), 85UL);
+    EXPECT_CHAR(*endptr, '\0');
+    EXPECT_ULONG(strtoul("256", NULL, 10), 256UL);
+    EXPECT_ULONG(strtoul("+23", NULL, 10), 23UL);
+    EXPECT_ULONG(strtoul(" -375", NULL, 10), -375UL);
+    EXPECT_ULONG(strtoul("0", NULL, 10), 0UL);
+    EXPECT_ULONG(strtoul("+0", NULL, 10), 0UL);
+    EXPECT_ULONG(strtoul("-0", NULL, 10), 0UL);
+    EXPECT_ULONG(strtoul("-1", &endptr, 10), -1UL);
+    EXPECT_CHAR(*endptr, '\0');
+    EXPECT_ULONG(strtoul("123alpha", &endptr, 10), 123UL);
+    EXPECT_CHAR(*endptr, 'a');
+    EXPECT_ULONG(strtoul("12b3", &endptr, 10), 12UL);
+    EXPECT_CHAR(*endptr, 'b');
+    EXPECT_ULONG(strtoul("alpha123", &endptr, 10), 0UL);
+    EXPECT_CHAR(*endptr, 'a');
+    EXPECT_ULONG(strtoul("18446744073709551615", NULL, 10), ULONG_MAX);
+    EXPECT_ULONG(strtoul("18446744073709551614", NULL, 10), 18446744073709551614UL);
+    // Octal numbers
+    EXPECT_ULONG(strtoul("  125", NULL, 8), 85UL);
+    EXPECT_ULONG(strtoul("  125", &endptr, 8), 85UL);
+    EXPECT_CHAR(*endptr, '\0');
+    EXPECT_ULONG(strtoul("1238", &endptr, 8), 83UL);
+    EXPECT_CHAR(*endptr, '8');
+    EXPECT_ULONG(strtoul("1777777777777777777777", NULL, 8), ULONG_MAX);
+    EXPECT_ULONG(strtoul("1777777777777777777776", NULL, 8), 18446744073709551614UL);
+    EXPECT_ULONG(strtoul("01777777777777777777777", NULL, 8), ULONG_MAX);
+    EXPECT_ULONG(strtoul("073", NULL, 8), 59UL);
+    // Hexadecimal numbers
+    EXPECT_ULONG(strtoul("  55", NULL, 16), 85UL);
+    EXPECT_ULONG(strtoul("  55", &endptr, 16), 85UL);
+    EXPECT_CHAR(*endptr, '\0');
+    EXPECT_ULONG(strtoul("123g", &endptr, 16), 291UL);
+    EXPECT_CHAR(*endptr, 'g');
+    EXPECT_ULONG(strtoul("ffffffffffffffff", NULL, 16), ULONG_MAX);
+    EXPECT_ULONG(strtoul("fffffffffffffffe", NULL, 16), 18446744073709551614UL);
+    EXPECT_ULONG(strtoul("0x7f0", NULL, 16), 2032);
+    EXPECT_ULONG(strtoul("0xffffffffffffffff", NULL, 16), ULONG_MAX);
+    // Informing zero base
+    EXPECT_ULONG(strtoul("  85", NULL, 0), 85UL);
+    EXPECT_ULONG(strtoul("  85", &endptr, 0), 85UL);
+    EXPECT_CHAR(*endptr, '\0');
+    EXPECT_ULONG(strtoul("256", NULL, 0), 256UL);
+    EXPECT_ULONG(strtoul("+23", NULL, 0), 23UL);
+    EXPECT_ULONG(strtoul(" -375", NULL, 0), -375UL);
+    EXPECT_ULONG(strtoul("0", NULL, 0), 0UL);
+    EXPECT_ULONG(strtoul("+0", NULL, 0), 0UL);
+    EXPECT_ULONG(strtoul("-0", NULL, 0), 0UL);
+    EXPECT_ULONG(strtoul("-1", NULL, 0), -1UL);
+    EXPECT_ULONG(strtoul("123alpha", &endptr, 0), 123UL);
+    EXPECT_CHAR(*endptr, 'a');
+    EXPECT_ULONG(strtoul("12b3", &endptr, 0), 12UL);
+    EXPECT_CHAR(*endptr, 'b');
+    EXPECT_ULONG(strtoul("alpha123", &endptr, 0), 0UL);
+    EXPECT_CHAR(*endptr, 'a');
+    EXPECT_ULONG(strtoul("18446744073709551615", NULL, 0), ULONG_MAX);
+    EXPECT_ULONG(strtoul("18446744073709551614", NULL, 0), 18446744073709551614UL);
+    EXPECT_ULONG(strtoul("0x123alpha", &endptr, 0), 4666UL);
+    EXPECT_CHAR(*endptr, 'l');
+    EXPECT_ULONG(strtoul("01238lpha", &endptr, 0), 83UL);
+    EXPECT_CHAR(*endptr, '8');
+    // Custom base
+    EXPECT_ULONG(strtoul("  zzz", NULL, 36), 46655UL);
+    EXPECT_ULONG(strtoul("  zzz]", &endptr, 36), 46655UL);
+    EXPECT_CHAR(*endptr, ']');
+    EXPECT_ULONG(strtoul("  hh", NULL, 30), 527UL);
+    EXPECT_ULONG(strtoul("  hhz", &endptr, 30), 527UL);
+    EXPECT_CHAR(*endptr, 'z');
+    // Invalid base
+    EXPECT_ULONG(strtoul("0", NULL, 1), 0UL);
+    EXPECT_ULONG(strtoul("1", NULL, 1), 0UL);
+    EXPECT_ULONG(strtoul("123", NULL, 42), 0UL);
+    EXPECT_ULONG(strtoul("zzz", NULL, 42), 0UL);
+    EXPECT_ULONG(strtoul("0123", NULL, -2), 0UL);
+}
+
+static void check_strtoull(void)
+{
+    char *endptr;
+    EXPECT_ULLONG(strtoull("  85", NULL, 10), 85ULL);
+    EXPECT_ULLONG(strtoull("  85", &endptr, 10), 85ULL);
+    EXPECT_CHAR(*endptr, '\0');
+    EXPECT_ULLONG(strtoull("256", NULL, 10), 256ULL);
+    EXPECT_ULLONG(strtoull("+23", NULL, 10), 23ULL);
+    EXPECT_ULLONG(strtoull(" -375", NULL, 10), -375ULL);
+    EXPECT_ULLONG(strtoull("0", NULL, 10), 0ULL);
+    EXPECT_ULLONG(strtoull("+0", NULL, 10), 0ULL);
+    EXPECT_ULLONG(strtoull("-0", NULL, 10), 0ULL);
+    EXPECT_ULLONG(strtoull("-1", &endptr, 10), -1ULL);
+    EXPECT_CHAR(*endptr, '\0');
+    EXPECT_ULLONG(strtoull("123alpha", &endptr, 10), 123ULL);
+    EXPECT_CHAR(*endptr, 'a');
+    EXPECT_ULLONG(strtoull("12b3", &endptr, 10), 12ULL);
+    EXPECT_CHAR(*endptr, 'b');
+    EXPECT_ULLONG(strtoull("alpha123", &endptr, 10), 0ULL);
+    EXPECT_CHAR(*endptr, 'a');
+    EXPECT_ULLONG(strtoull("18446744073709551615", NULL, 10), ULLONG_MAX);
+    EXPECT_ULLONG(strtoull("18446744073709551614", NULL, 10), 18446744073709551614ULL);
+    // Octal numbers
+    EXPECT_ULLONG(strtoull("  125", NULL, 8), 85ULL);
+    EXPECT_ULLONG(strtoull("  125", &endptr, 8), 85ULL);
+    EXPECT_CHAR(*endptr, '\0');
+    EXPECT_ULLONG(strtoull("1238", &endptr, 8), 83ULL);
+    EXPECT_CHAR(*endptr, '8');
+    EXPECT_ULLONG(strtoull("1777777777777777777777", NULL, 8), ULLONG_MAX);
+    EXPECT_ULLONG(strtoull("1777777777777777777776", NULL, 8), 18446744073709551614ULL);
+    EXPECT_ULLONG(strtoull("01777777777777777777777", NULL, 8), ULLONG_MAX);
+    EXPECT_ULLONG(strtoull("073", NULL, 8), 59ULL);
+    // Hexadecimal numbers
+    EXPECT_ULLONG(strtoull("  55", NULL, 16), 85ULL);
+    EXPECT_ULLONG(strtoull("  55", &endptr, 16), 85ULL);
+    EXPECT_CHAR(*endptr, '\0');
+    EXPECT_ULLONG(strtoull("123g", &endptr, 16), 291ULL);
+    EXPECT_CHAR(*endptr, 'g');
+    EXPECT_ULLONG(strtoull("ffffffffffffffff", NULL, 16), ULLONG_MAX);
+    EXPECT_ULLONG(strtoull("fffffffffffffffe", NULL, 16), 18446744073709551614ULL);
+    EXPECT_ULLONG(strtoull("0x7f0", NULL, 16), 2032);
+    EXPECT_ULLONG(strtoull("0xffffffffffffffff", NULL, 16), ULLONG_MAX);
+    // Informing zero base
+    EXPECT_ULLONG(strtoull("  85", NULL, 0), 85ULL);
+    EXPECT_ULLONG(strtoull("  85", &endptr, 0), 85ULL);
+    EXPECT_CHAR(*endptr, '\0');
+    EXPECT_ULLONG(strtoull("256", NULL, 0), 256ULL);
+    EXPECT_ULLONG(strtoull("+23", NULL, 0), 23ULL);
+    EXPECT_ULLONG(strtoull(" -375", NULL, 0), -375ULL);
+    EXPECT_ULLONG(strtoull("0", NULL, 0), 0ULL);
+    EXPECT_ULLONG(strtoull("+0", NULL, 0), 0ULL);
+    EXPECT_ULLONG(strtoull("-0", NULL, 0), 0ULL);
+    EXPECT_ULLONG(strtoull("-1", NULL, 0), -1ULL);
+    EXPECT_ULLONG(strtoull("123alpha", &endptr, 0), 123ULL);
+    EXPECT_CHAR(*endptr, 'a');
+    EXPECT_ULLONG(strtoull("12b3", &endptr, 0), 12ULL);
+    EXPECT_CHAR(*endptr, 'b');
+    EXPECT_ULLONG(strtoull("alpha123", &endptr, 0), 0ULL);
+    EXPECT_CHAR(*endptr, 'a');
+    EXPECT_ULLONG(strtoull("18446744073709551615", NULL, 0), ULLONG_MAX);
+    EXPECT_ULLONG(strtoull("18446744073709551614", NULL, 0), 18446744073709551614ULL);
+    EXPECT_ULLONG(strtoull("0x123alpha", &endptr, 0), 4666ULL);
+    EXPECT_CHAR(*endptr, 'l');
+    EXPECT_ULLONG(strtoull("01238lpha", &endptr, 0), 83ULL);
+    EXPECT_CHAR(*endptr, '8');
+    // Custom base
+    EXPECT_ULLONG(strtoull("  zzz", NULL, 36), 46655ULL);
+    EXPECT_ULLONG(strtoull("  zzz]", &endptr, 36), 46655ULL);
+    EXPECT_CHAR(*endptr, ']');
+    EXPECT_ULLONG(strtoull("  hh", NULL, 30), 527ULL);
+    EXPECT_ULLONG(strtoull("  hhz", &endptr, 30), 527ULL);
+    EXPECT_CHAR(*endptr, 'z');
+    // Invalid base
+    EXPECT_ULLONG(strtoull("0", NULL, 1), 0ULL);
+    EXPECT_ULLONG(strtoull("1", NULL, 1), 0ULL);
+    EXPECT_ULLONG(strtoull("123", NULL, 42), 0ULL);
+    EXPECT_ULLONG(strtoull("zzz", NULL, 42), 0ULL);
+    EXPECT_ULLONG(strtoull("0123", NULL, -2), 0ULL);
+}
+
+static void check_stdlib(void)
+{
+    check_atoi();
+    check_atol();
+    check_atoll();
+    check_strtol();
+    check_strtoll();
+    check_strtoul();
+    check_strtoull();
+}
+
 //------------------------------------------------------------------------------
 // STDIO.H
 //------------------------------------------------------------------------------
@@ -723,6 +1138,7 @@ int main(void)
 {
     check_ctype();
     check_cstring();
+    check_stdlib();
     check_stdio();
     return EXIT_SUCCESS;
 }

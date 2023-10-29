@@ -35,7 +35,7 @@
 #include "libcj.h"
 
 //------------------------------------------------------------------------------
-// SOURCE
+// DEFINITIONS
 //------------------------------------------------------------------------------
 
 #ifdef __GNUC__ 
@@ -86,6 +86,10 @@
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define ABS(x)    (((x) >= 0) ? (x) : -(x))
 
+//------------------------------------------------------------------------------
+// CUSTOM TYPES
+//------------------------------------------------------------------------------
+
 // The length modifiers j, z and t are not implemented
 enum Length_Modifier {
     Modifier_None,
@@ -112,36 +116,81 @@ enum Fmt_Flags {
     Flag_Short = 0x80, // Float number short form
 };
 
-// Parses a integer number using base 8, 10 or 16
-static int str_to_int(const char *fmt, const int base, int *const value)
-{
-    int index = 0;
-    int number = 0;
-    for (; fmt[index] != '\0'; index++) {
-        const char c = fmt[index];
-        int digit = 0;
-        if (isdigit(c)) {
-            digit = c - '0';
-        } else if ((base == 16) && isxdigit(c)) {
-            digit = tolower(c) - 'a' + 10;
-        } else {
-            break;
-        }
-        // TODO: I believe that still could happen an overflow
-        if (number <= INT_MAX / base) {
-            number = base * number + digit;
-        } else {
-            // Overflow detected
-            // In this case we return the maximum positive number that a int can store,
-            // and we continue the loop, in order to parse all the number
-            number = INT_MAX;
-        }
+//------------------------------------------------------------------------------
+// SOURCE
+//------------------------------------------------------------------------------
+
+// This macro defines a function that parses a sign integer number
+// using bases from 0 to 36
+#define CREATE_STR_TO_INT_FN(name, type, zero, max, min) \
+    static int name ( \
+        const char *const str, \
+        int base, \
+        type *const value) \
+    { \
+        int index = 0; \
+        bool negative = false; \
+        *value = zero; \
+        if ((base < 0) || (base > 36)) { \
+            return 0; \
+        } \
+        if ((str[index] == '+') || (str[index] == '-')) { \
+            negative = str[index] == '-'; \
+            index++; \
+        } \
+        if (str[index] == '0') { \
+            if (str[index+1] == 'x') { \
+                if ((base == 0) || (base == 16)) { \
+                    base = 16; \
+                    index += 2; \
+                } \
+            } else { \
+                if ((base == 0) || (base == 8)) { \
+                    base = 8; \
+                    index++; \
+                } \
+            } \
+        } \
+        if (base == 0) { \
+            base = 10; \
+        } \
+        for (; str[index] != '\0'; index++) { \
+            const char c = str[index]; \
+            int digit = 0; \
+            if (isdigit(c)) { \
+                digit = c - '0'; \
+            } else if ((base > 10) && isalpha(c)) { \
+                digit = tolower(c) - 'a' + 10; \
+            } else { \
+                break; \
+            } \
+            if (digit >= base) { \
+                break; \
+            } \
+            if (negative) { \
+                if (*value >= (min) / (type)base) { \
+                    *value = (type)base * *value - (type)digit; \
+                } else { \
+                    *value = (min); \
+                } \
+            } else { \
+                if (*value <= (max) / (type)base) { \
+                    *value = (type)base * (*value) + (type)digit; \
+                } else { \
+                    *value = (max); \
+                } \
+            } \
+        } \
+        return index; \
     }
-    if (index > 0) {
-        *value = number;
-    }
-    return index;
-}
+
+// Some sort of generics in C using the preprocessor
+CREATE_STR_TO_INT_FN(str_to_int, int, 0, INT_MAX, INT_MIN)
+CREATE_STR_TO_INT_FN(str_to_long, long, 0L, LONG_MAX, LONG_MIN)
+CREATE_STR_TO_INT_FN(str_to_longlong, long long, 0LL, LLONG_MAX, LLONG_MIN)
+CREATE_STR_TO_INT_FN(str_to_uint, unsigned int, (unsigned int)0, UINT_MAX, (unsigned int)0)
+CREATE_STR_TO_INT_FN(str_to_ulong, unsigned long, 0UL, ULONG_MAX, 0UL)
+CREATE_STR_TO_INT_FN(str_to_ulonglong, unsigned long long, 0ULL, ULLONG_MAX, 0ULL)
 
 // Return the amount of characters that would have been written if we had enough size
 static int int_to_str(char **buf, size_t *const sz,
@@ -1035,17 +1084,48 @@ size_t strlen(const char *str)
 // STDLIB.H
 //------------------------------------------------------------------------------
 
+// Convert string to integer
+#define CREATE_ATOI_FN(name, type, fn) \
+    type name(const char *str) \
+    { \
+        while ((*str != '\0') && isspace(*str)) { \
+            str++; \
+        } \
+        type value; \
+        fn(str, 10, &value); \
+        return value; \
+    }
+
+CREATE_ATOI_FN(atoi, int, str_to_int)
+CREATE_ATOI_FN(atol, long, str_to_long)
+CREATE_ATOI_FN(atoll, long long, str_to_longlong)
+
+// Convert string to integer
+#define CREATE_STRTOI_FN(name, type, fn) \
+    type name(const char *str, char **endptr, int base) \
+    { \
+        while ((*str != '\0') && isspace(*str)) { \
+            str++; \
+        } \
+        type value; \
+        const int parsed = fn(str, base, &value); \
+        if (endptr != NULL) { \
+            *endptr = (char *)str + parsed; \
+        } \
+        return value; \
+    }
+
+CREATE_STRTOI_FN(strtoi, int, str_to_int)
+CREATE_STRTOI_FN(strtol, long, str_to_long)
+CREATE_STRTOI_FN(strtoll, long long, str_to_longlong)
+CREATE_STRTOI_FN(strtou, unsigned int, str_to_uint)
+CREATE_STRTOI_FN(strtoul, unsigned long, str_to_ulong)
+CREATE_STRTOI_FN(strtoull, unsigned long long, str_to_ulonglong)
+
 // TODO: atof       Convert string to double
-// TODO: atoi       Convert string to integer
-// TODO: atol       Convert string to long integer
-// TODO: atoll      Convert string to long long integer
-// TODO: strtod     Convert string to double
 // TODO: strtof     Convert string to float
-// TODO: strtol     Convert string to long integer
+// TODO: strtod     Convert string to double
 // TODO: strtold    Convert string to long double
-// TODO: strtoll    Convert string to long long integer
-// TODO: strtoul    Convert string to unsigned long integer
-// TODO: strtoull   Convert string to unsigned long long integer
 
 //------------------------------------------------------------------------------
 // STDIO.H
