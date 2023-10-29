@@ -6,9 +6,9 @@
 
 **lib-cj** is a reimplementation of certain libc functions, such as `snprintf`. It was created as a pure learning experiment and is not intended for commercial use. Key features of this project include:
 
-- Developed with C11.
-- Tested on Linux (compatible with GNU GCC or clang).
-- Includes a suite of simple automated tests to ensure correctness.
+- Developed with C11;
+- Tested on Linux (compatible with GNU GCC or clang);
+- Includes a suite of simple automated tests to ensure correctness (Check [test.h](./test.h));
 
 ## Usage
 
@@ -22,4 +22,4 @@ To use this project, follow these steps:
 $ make test
 ```
 
-Please note that this project is not recommended for commercial use and is intended primarily for educational purposes and experimentation.
+Please note that this project is not optimized, and therefore not recommended for commercial use. This project was primarily created for educational purposes and as an experiment.
