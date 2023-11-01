@@ -200,9 +200,8 @@ static int int_to_str(char **buf, size_t *const sz,
     const bool left_justify = flags & Flag_Minus;
     const bool negative = sign && (value < 0);
     const bool uppercase = (flags & Flag_Upper) != 0;
-    // Pointers are the only unsigned integer that can have the plus sign
-    // We detect this condition by checking both flags Flag_Plus and Flag_Hash
-    const bool include_sign = negative || ((flags & Flag_Plus) && (sign || (flags & Flag_Hash)));
+    // Pointers are the only unsigned integer that can have the plus flag
+    const bool include_sign = negative || ((flags & Flag_Plus) != 0);
     const int base_padding = ((flags & Flag_Hash) && (base != 10) && (value != 0)) ? (base / 8) : 0;
     // Padding using for sign and base specifiers
     const int left_padding = (int)(include_sign ? (base_padding+1) : base_padding);
@@ -642,7 +641,6 @@ LIBCJ_FN double next_float_arg(va_list args, enum Length_Modifier modifier)
 
 static int __vsnprintf(char **buf, size_t *const sz, const char *fmt, va_list args)
 {
-    enum Fmt_Specifier specifier;
     enum Fmt_Flags flags;
     enum Length_Modifier modifier;
     bool uppercase;
@@ -652,19 +650,16 @@ static int __vsnprintf(char **buf, size_t *const sz, const char *fmt, va_list ar
         return -1;
     }
     while (*cursor != '\0') {
-        if (*cursor != '%') {
-            PUTCHAR(*cursor);
-            cursor++;
-            written++;
-        } else {
-            cursor++; // Escape % character
+        enum Fmt_Specifier specifier = Fmt_unknown;
+        int width = -1, precision = -1;
+        if (*cursor == '%') {
+            va_list copied_args;
+            va_copy(copied_args, args);
+            int parsed_chars = 1; // Start with one character parsed ('%')
             // snprintf format specifier follows this pattern:
             // %[flags][width][.precision][length]specifier
             // https://cplusplus.com/reference/cstdio/printf/
-            int parsed_chars = parse_fmt_flags(cursor, &flags);
-            int width = -1, precision = -1;
-            va_list copied_args;
-            va_copy(copied_args, args);
+            parsed_chars += parse_fmt_flags((cursor+parsed_chars), &flags);
             parsed_chars += parse_width_precision((cursor+parsed_chars), copied_args, &width, &precision);
             parsed_chars += parse_fmt_specifier((cursor+parsed_chars), &specifier, &modifier, &uppercase);
             // If the format specifier was fully parsed, update the cursor position and args
@@ -675,59 +670,64 @@ static int __vsnprintf(char **buf, size_t *const sz, const char *fmt, va_list ar
             if (uppercase) {
                 flags |= Flag_Upper;
             }
-            switch (specifier) {
-            case Fmt_d:
-            case Fmt_i: // Signed integer
-                written += int_to_str(buf, sz, width, precision, flags, 10, true, next_int_arg(args, modifier));
-                break;
-            case Fmt_u: // Unsigned integer
-                written += int_to_str(buf, sz, width, precision, flags, 10, false, next_uint_arg(args, modifier));
-                break;
-            case Fmt_o: // Unsigned integer in octal form
-                flags = flags & (enum Fmt_Flags)~Flag_Plus; // This flag isn't supported for octal numbers
-                written += int_to_str(buf, sz, width, precision, flags, 8, false, next_uint_arg(args, modifier));
-                break;
-            case Fmt_x: // Unsigned integer in hexadecimal form
-                flags = flags & (enum Fmt_Flags)~Flag_Plus; // This flag isn't supported for hexadecimal numbers
-                written += int_to_str(buf, sz, width, precision, flags, 16, false, next_uint_arg(args, modifier));
-                break;
-            case Fmt_f: // Decimal floating point
-                written += double_to_str(buf, sz, width, precision, flags, 10, next_float_arg(args, modifier));
-                break;
-            case Fmt_e: // Decimal floating point in exponent form
-                written += double_to_str(buf, sz, width, precision, (flags | Flag_Exp), 10, next_float_arg(args, modifier));
-                break;
-            case Fmt_g: // Decimal floating point in shortest form
-                written += double_to_str(buf, sz, width, precision, (flags | Flag_Short), 10, next_float_arg(args, modifier));
-                break;
-            case Fmt_a: // Decimal floating point in hexadecimal form
-                written += double_to_str(buf, sz, width, precision, (flags | Flag_Exp), 16, next_float_arg(args, modifier));
-                break;
-            case Fmt_c: // Character
-                PUTCHAR((char)va_arg(args, int));
-                written++;
-                break;
-            case Fmt_s: // String
-                written += put_string(buf, sz, width, precision, (flags & Flag_Minus), va_arg(args, char *));
-                break;
-            case Fmt_p: { // Pointer
-                const void *ptr = va_arg(args, void *);
-                if (ptr == NULL) {
-                    written += put_string(buf, sz, width, precision, (flags & Flag_Minus), "(nil)");
-                } else {
-                    written += int_to_str(buf, sz, width, precision, (flags | Flag_Hash), 16, false, (intmax_t)ptr);
-                }
-            } break;
-            case Fmt_n: { // Return the number of characters written so far
-                int *ptr = va_arg(args, int *);
-                *ptr = written;
-            } break;
-            case Fmt_percent:
-            case Fmt_unknown:
-                PUTCHAR('%');
-                written++;
-                break;
+        }
+        switch (specifier) {
+        case Fmt_d:
+        case Fmt_i: // Signed integer
+            written += int_to_str(buf, sz, width, precision, flags, 10, true, next_int_arg(args, modifier));
+            break;
+        case Fmt_u: // Unsigned integer
+            flags = flags & (enum Fmt_Flags)~Flag_Plus; // This flag isn't supported for unsigned numbers
+            written += int_to_str(buf, sz, width, precision, flags, 10, false, next_uint_arg(args, modifier));
+            break;
+        case Fmt_o: // Unsigned integer in octal form
+            flags = flags & (enum Fmt_Flags)~Flag_Plus; // This flag isn't supported for octal numbers
+            written += int_to_str(buf, sz, width, precision, flags, 8, false, next_uint_arg(args, modifier));
+            break;
+        case Fmt_x: // Unsigned integer in hexadecimal form
+            flags = flags & (enum Fmt_Flags)~Flag_Plus; // This flag isn't supported for hexadecimal numbers
+            written += int_to_str(buf, sz, width, precision, flags, 16, false, next_uint_arg(args, modifier));
+            break;
+        case Fmt_f: // Decimal floating point
+            written += double_to_str(buf, sz, width, precision, flags, 10, next_float_arg(args, modifier));
+            break;
+        case Fmt_e: // Decimal floating point in exponent form
+            written += double_to_str(buf, sz, width, precision, (flags | Flag_Exp), 10, next_float_arg(args, modifier));
+            break;
+        case Fmt_g: // Decimal floating point in shortest form
+            written += double_to_str(buf, sz, width, precision, (flags | Flag_Short), 10, next_float_arg(args, modifier));
+            break;
+        case Fmt_a: // Decimal floating point in hexadecimal form
+            written += double_to_str(buf, sz, width, precision, (flags | Flag_Exp), 16, next_float_arg(args, modifier));
+            break;
+        case Fmt_c: // Character
+            PUTCHAR((char)va_arg(args, int));
+            written++;
+            break;
+        case Fmt_s: // String
+            written += put_string(buf, sz, width, precision, (flags & Flag_Minus), va_arg(args, char *));
+            break;
+        case Fmt_p: { // Pointer
+            const void *ptr = va_arg(args, void *);
+            if (ptr == NULL) {
+                written += put_string(buf, sz, width, precision, (flags & Flag_Minus), "(nil)");
+            } else {
+                written += int_to_str(buf, sz, width, precision, (flags | Flag_Hash), 16, false, (intmax_t)ptr);
             }
+        } break;
+        case Fmt_n: { // Return the number of characters written so far
+            int *ptr = va_arg(args, int *);
+            *ptr = written;
+        } break;
+        case Fmt_percent:
+            PUTCHAR('%');
+            written++;
+            break;
+        case Fmt_unknown:
+            PUTCHAR(*cursor);
+            cursor++;
+            written++;
+            break;
         }
     }
     // null termination
@@ -1241,6 +1241,7 @@ CREATE_STRTOF_FN(strtold, long double, str_to_ldouble)
 // STDIO.H
 //------------------------------------------------------------------------------
 
+// Write formatted data to string
 int sprintf(char *buf, const char *fmt, ...)
 {
     va_list args;
@@ -1250,6 +1251,7 @@ int sprintf(char *buf, const char *fmt, ...)
     return written;
 }
 
+// Write formatted output to sized buffer
 int snprintf(char *buf, size_t sz, const char *fmt, ...)
 {
     va_list args;
@@ -1259,19 +1261,37 @@ int snprintf(char *buf, size_t sz, const char *fmt, ...)
     return written;
 }
 
+// Write formatted data from variable argument list to string
 int vsprintf(char *buf, const char *fmt, va_list args)
 {
     return __vsnprintf(&buf, NULL, fmt, args);
 }
 
+// Write formatted data from variable argument list to sized buffer
 int vsnprintf(char *buf, size_t sz, const char *fmt, va_list args)
 {
     return __vsnprintf(&buf, &sz, fmt, args);
 }
 
-// https://cplusplus.com/reference/cstdio/scanf/
-// TODO: sscanf     Read formatted data from string
-// TODO: vsscanf    Read formatted data from string into variable argument list
+// Read formatted data from string
+int sscanf(const char *buf, const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    const int count = vsscanf(buf, fmt, args);
+    va_end(args);
+    return count;
+}
+
+// Read formatted data from string into variable argument list
+int vsscanf(const char *buf, const char *fmt, va_list args)
+{
+    (void)buf;
+    (void)fmt;
+    (void)args;
+    // TODO: Not implemented yet
+    return 0;
+}
 
 //------------------------------------------------------------------------------
 // END

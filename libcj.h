@@ -94,6 +94,10 @@ int snprintf(char *buf, size_t sz, const char *fmt, ...)
 int vsprintf(char *buf, const char *fmt, va_list args);
 int vsnprintf(char *buf, size_t sz, const char *fmt, va_list args);
 
+int sscanf(const char *buf, const char *fmt, ...)
+    __attribute__((format(scanf, 2, 3)));
+int vsscanf(const char *buf, const char *fmt, va_list args);
+
 // Temporary buffer print function
 char *tprint(char *fmt, ...)
     __attribute__((format(printf, 1, 2)));
