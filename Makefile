@@ -59,7 +59,7 @@ test: test_libc test_libcj
 	@ echo "Congrats! All tests passed!"
 
 clean:
-	rm -rf test* *.o
+	rm -rf test_lib* *.o
 
 .PHONY: all test clean
 

@@ -27,6 +27,7 @@
 #ifdef USE_LIB_CJ
 #include "libcj.h"
 #else // USE_LIB_CJ
+#define _GNU_SOURCE
 #include <ctype.h>
 #include <string.h>
 #endif // USE_LIB_CJ
@@ -446,6 +447,55 @@ static void check_strlen(void)
     EXPECT_SIZE(strlen(test), 4);
 }
 
+static void check_strtok_r(void)
+{
+    char hello_world[] = "Hello World!";
+    char *ptr;
+    EXPECT_STR(strtok_r(hello_world, " !", &ptr), "Hello");
+    EXPECT_STR(strtok_r(NULL, " !", &ptr), "World");
+    EXPECT_PTR(strtok_r(NULL, " !", &ptr), NULL);
+    EXPECT_PTR(strtok_r(NULL, " !", &ptr), NULL);
+    char example[] = "!A simple, but effective, test sentence!";
+    EXPECT_STR(strtok_r(example, " !,", &ptr), "A");
+    EXPECT_STR(strtok_r(NULL, " !,", &ptr), "simple");
+    EXPECT_STR(strtok_r(NULL, " !,", &ptr), "but");
+    EXPECT_STR(strtok_r(NULL, " !,", &ptr), "effective");
+    EXPECT_STR(strtok_r(NULL, " !,", &ptr), "test");
+    EXPECT_STR(strtok_r(NULL, " !,", &ptr), "sentence");
+    EXPECT_PTR(strtok_r(NULL, " !,", &ptr), NULL);
+    EXPECT_PTR(strtok_r(NULL, " !,", &ptr), NULL);
+}
+
+static void check_strsep(void)
+{
+    char hello_world[] = "Hello World!";
+    char *ptr = NULL;
+    EXPECT_PTR(strsep(&ptr, " "), NULL);
+    EXPECT_PTR(ptr, NULL);
+    ptr = hello_world;
+    EXPECT_STR(strsep(&ptr, " !"), "Hello");
+    EXPECT_CHAR(*ptr, 'W');
+    EXPECT_STR(strsep(&ptr, " !"), "World");
+    EXPECT_CHAR(*ptr, '\0');
+    EXPECT_STR(strsep(&ptr, " !"), "");
+    EXPECT_PTR(ptr, NULL);
+    EXPECT_PTR(strsep(&ptr, " !"), NULL);
+    char example[] = "!A simple, but effective, test sentence!";
+    ptr = example;
+    EXPECT_STR(strsep(&ptr, " !,"), "");
+    EXPECT_STR(strsep(&ptr, " !,"), "A");
+    EXPECT_STR(strsep(&ptr, " !,"), "simple");
+    EXPECT_STR(strsep(&ptr, " !,"), "");
+    EXPECT_STR(strsep(&ptr, " !,"), "but");
+    EXPECT_STR(strsep(&ptr, " !,"), "effective");
+    EXPECT_STR(strsep(&ptr, " !,"), "");
+    EXPECT_STR(strsep(&ptr, " !,"), "test");
+    EXPECT_STR(strsep(&ptr, " !,"), "sentence");
+    EXPECT_STR(strsep(&ptr, " !,"), "");
+    EXPECT_PTR(strsep(&ptr, " !,"), NULL);
+    EXPECT_PTR(strsep(&ptr, " !,"), NULL);
+}
+
 static void check_cstring(void)
 {
     check_memcpy();
@@ -467,6 +517,8 @@ static void check_cstring(void)
     check_strtok();
     check_memset();
     check_strlen();
+    check_strtok_r();
+    check_strsep();
 }
 
 //------------------------------------------------------------------------------
@@ -1026,7 +1078,7 @@ static void check_snprintf(void)
         char buffer[10];
         const int ret = snprintf(buffer, sizeof(buffer), fmt);
         EXPECT_STR(buffer, expected);
-        EXPECT_INT(ret, strlen(fmt));
+        EXPECT_INT(ret, (int)strlen(fmt));
     }
     // Signed decimal integer
     TEST_SNPRINTF("10 -10 -2147483648 2147483647", "%d %d %d %d", 10, -10, INT_MIN, INT_MAX);
@@ -1141,7 +1193,7 @@ static void check_snprintf(void)
     // The number of characters written so far is stored in the pointed location
     {
         const char expected[] = "Testing characters written";
-        const int expected_size = strlen(expected);
+        const int expected_size = (int)strlen(expected);
         char buffer[BUFFER_SIZE];
         int begin, middle, end;
         const int ret = snprintf(buffer, sizeof(buffer), "%nTesting %n%s%n", &begin, &middle, "characters written", &end);

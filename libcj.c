@@ -1094,33 +1094,11 @@ char *strstr(const char *haystack, const char *needle)
     return NULL;
 }
 
-// TODO: Maybe implement strsep
-
 // Split string into tokens
 char *strtok(char *str, const char *delimiters)
 {
     static THREAD_LOCAL char *old_str = NULL;
-    if (str == NULL) {
-        // Use the saved pointer
-        str = old_str;
-    }
-    if (str == NULL) {
-        return NULL;
-    }
-    // Find the beginning of the token
-    char *const tok_begin = str + strspn(str, delimiters);
-    if (*tok_begin == '\0') {
-        // Didn't found any token
-        old_str = NULL;
-        return NULL;
-    }
-    // Find the end of the token
-    char *const tok_end = strpbrk(tok_begin, delimiters);
-    if (tok_end != NULL) {
-        old_str = *tok_end != '\0' ? (tok_end+1) : NULL;
-        *tok_end = '\0';
-    }
-    return tok_begin;
+    return strtok_r(str, delimiters, &old_str);
 }
 
 // Fill block of memory
@@ -1141,6 +1119,50 @@ size_t strlen(const char *str)
         i++;
     }
     return i;
+}
+
+// Reentrant version of the strtok function
+char *strtok_r(char *str, const char *delimiters, char **saveptr)
+{
+    if (str == NULL) {
+        // Use the saved pointer
+        str = *saveptr;
+    }
+    if (str == NULL) {
+        return NULL;
+    }
+    // Find the beginning of the token
+    char *const tok_begin = str + strspn(str, delimiters);
+    if (*tok_begin == '\0') {
+        // Didn't found any token
+        *saveptr = NULL;
+        return NULL;
+    }
+    // Find the end of the token
+    char *const tok_end = strpbrk(tok_begin, delimiters);
+    if (tok_end != NULL) {
+        *saveptr = *tok_end != '\0' ? (tok_end+1) : NULL;
+        *tok_end = '\0';
+    }
+    return tok_begin;
+}
+
+// Function defined in POSIX-compliant librarys
+char *strsep(char **str, const char *delimiters)
+{
+    if ((str == NULL) || (*str == NULL)) {
+        return NULL;
+    }
+    char *const tok_begin = *str;
+    // Find the end of the token
+    char *const tok_end = strpbrk(tok_begin, delimiters);
+    if (tok_end != NULL) {
+        *str = *tok_end != '\0' ? (tok_end+1) : NULL;
+        *tok_end = '\0';
+    } else {
+        *str = NULL;
+    }
+    return tok_begin;
 }
 
 //------------------------------------------------------------------------------

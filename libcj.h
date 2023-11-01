@@ -69,6 +69,9 @@ size_t strspn(const char *str, const char *needles);
 char *strtok(char *str, const char *delimiters);
 void *memset(void *ptr, int value, size_t sz);
 size_t strlen(const char *str);
+// Alternatives to strtok
+char *strtok_r(char *str, const char *delimiters, char **saveptr);
+char *strsep(char **str, const char *delimiters);
 
 int atoi(const char *str);
 long atol(const char *str);
