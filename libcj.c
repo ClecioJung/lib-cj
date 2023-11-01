@@ -663,10 +663,13 @@ static int __vsnprintf(char **buf, size_t *const sz, const char *fmt, va_list ar
             // https://cplusplus.com/reference/cstdio/printf/
             int parsed_chars = parse_fmt_flags(cursor, &flags);
             int width = -1, precision = -1;
-            parsed_chars += parse_width_precision((cursor+parsed_chars), args, &width, &precision);
+            va_list copied_args;
+            va_copy(copied_args, args);
+            parsed_chars += parse_width_precision((cursor+parsed_chars), copied_args, &width, &precision);
             parsed_chars += parse_fmt_specifier((cursor+parsed_chars), &specifier, &modifier, &uppercase);
-            // If the format specifier was fully parsed, update the cursor position
+            // If the format specifier was fully parsed, update the cursor position and args
             if (specifier != Fmt_unknown) {
+                args = copied_args;
                 cursor += parsed_chars;
             }
             if (uppercase) {
@@ -1090,6 +1093,8 @@ char *strstr(const char *haystack, const char *needle)
     }
     return NULL;
 }
+
+// TODO: Maybe implement strsep
 
 // Split string into tokens
 char *strtok(char *str, const char *delimiters)

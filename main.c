@@ -1151,6 +1151,8 @@ static void check_snprintf(void)
         EXPECT_INT(middle, 8);
         EXPECT_INT(end, expected_size);
     }
+    // Invalid specifiers
+    TEST_SNPRINTF("%k %r %v %y %", "%k %r %v %y %");
 }
 
 static void check_stdio(void)
