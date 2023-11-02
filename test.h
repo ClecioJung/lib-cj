@@ -33,7 +33,6 @@
 // You may want to include the headers math.h, stdio.h and stdlib.h in order to
 // use this library.
 
-// TODO: Introduce a function to escape special chars
 #define EXPECT_STR(value, to_equal) expect_str(__FILE__, __LINE__, value, to_equal)
 #define EXPECT_SIZED_STR(value, to_equal, size) expect_sized_str(__FILE__, __LINE__, value, to_equal, size)
 #define EXPECT_TRUE(value) expect_true(__FILE__, __LINE__, value)
@@ -145,6 +144,7 @@ CREATE_EXPECT_NUMBER_PREC_FN(expect_ldouble_prec, long double, "%f", fabsl)
 void expect_str(const char *const file, const unsigned int line, const char *const value, const char *const to_equal)
 {
     if (strcmp(value, to_equal) != 0) {
+        // TODO: Introduce a function to escape special chars
         fprintf(stderr, "%s:%u [TEST FAILED] expected string\n    \"%s\"\n  but got\n    \"%s\"\n", file, line, to_equal, value);
         exit(EXIT_FAILURE);
     }

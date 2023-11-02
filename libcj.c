@@ -742,6 +742,7 @@ static int __vsnprintf(char **buf, size_t *const sz, const char *fmt, va_list ar
             }
         } break;
         case Fmt_n: { // Return the number of characters written so far
+            // Length modifiers are not implemented for %n
             int *ptr = va_arg(args, int *);
             *ptr = written;
         } break;
@@ -1309,102 +1310,144 @@ int vsscanf(const char *buf, const char *fmt, va_list args)
     }
     while (*cursor != '\0') {
         enum Fmt_Specifier specifier = Fmt_unknown;
-        //int width = -1;
         if (*cursor == '%') {
-            va_list copied_args;
-            va_copy(copied_args, args);
+            bool assignment_suppression = false;
+            int width = -1;
             int parsed_chars = 1; // Start with one character parsed ('%')
             // sscanf format specifier follows this pattern:
             // %[*][width][length]specifier
             // https://cplusplus.com/reference/cstdio/scanf/
+            if (*(cursor+parsed_chars) == '*') {
+                assignment_suppression = true;
+                parsed_chars++;
+            }
+            parsed_chars += str_to_int((cursor+parsed_chars), 10, false, &width);
             parsed_chars += parse_fmt_specifier((cursor+parsed_chars), &specifier, &modifier, NULL);
             // If the format specifier was fully parsed, update the cursor position and args
             if (specifier != Fmt_unknown) {
-                args = copied_args; // TODO: Update count if any args were parsed
                 cursor += parsed_chars;
             }
             switch (specifier) {
-            case Fmt_d: // Signed integer in decimal base
-                // TODO: Create a macro like this: PROCESS_ARG(str_to_int(buf_cursor, 10, va_arg(copied_args, int *)))
-                parsed_chars = str_to_int(buf_cursor, 10, true, va_arg(copied_args, int *));
+            case Fmt_d: { // Signed integer in decimal base
+                int value;
+                // TODO: Create a macro like this: PROCESS_ARG(str_to_int(buf_cursor, 10, &value))
+                parsed_chars = str_to_int(buf_cursor, 10, true, &value);
                 if (parsed_chars > 0) {
-                    args = copied_args;
+                    if (!assignment_suppression) {
+                        int *ptr = va_arg(args, int *);
+                        *ptr = value;
+                        count++;
+                    }
                     buf_cursor += parsed_chars;
-                    count++;
                 }
-                break;
-            case Fmt_i: // Signed integer in decimal, hexadecimal or octal base
-                parsed_chars = str_to_int(buf_cursor, 0, true, va_arg(copied_args, int *));
+            } break;
+            case Fmt_i: { // Signed integer in decimal, hexadecimal or octal base
+                int value;
+                parsed_chars = str_to_int(buf_cursor, 0, true, &value);
                 if (parsed_chars > 0) {
-                    args = copied_args;
+                    if (!assignment_suppression) {
+                        int *ptr = va_arg(args, int *);
+                        *ptr = value;
+                        count++;
+                    }
                     buf_cursor += parsed_chars;
-                    count++;
                 }
-                break;
-            case Fmt_u: // Unsigned integer
-                parsed_chars = str_to_uint(buf_cursor, 10, true, va_arg(copied_args, unsigned int *));
+            } break;
+            case Fmt_u: { // Unsigned integer
+                unsigned int value;
+                parsed_chars = str_to_uint(buf_cursor, 10, true, &value);
                 if (parsed_chars > 0) {
-                    args = copied_args;
+                    if (!assignment_suppression) {
+                        unsigned int *ptr = va_arg(args, unsigned int *);
+                        *ptr = value;
+                        count++;
+                    }
                     buf_cursor += parsed_chars;
-                    count++;
                 }
-                break;
-            case Fmt_o: // Unsigned integer in octal form
-                parsed_chars = str_to_uint(buf_cursor, 8, true, va_arg(copied_args, unsigned int *));
+            } break;
+            case Fmt_o: { // Unsigned integer in octal form
+                unsigned int value;
+                parsed_chars = str_to_uint(buf_cursor, 8, true, &value);
                 if (parsed_chars > 0) {
-                    args = copied_args;
+                    if (!assignment_suppression) {
+                        unsigned int *ptr = va_arg(args, unsigned int *);
+                        *ptr = value;
+                        count++;
+                    }
                     buf_cursor += parsed_chars;
-                    count++;
                 }
-                break;
-            case Fmt_x: // Unsigned integer in hexadecimal form
-                parsed_chars = str_to_uint(buf_cursor, 16, true, va_arg(copied_args, unsigned int *));
+            } break;
+            case Fmt_x: { // Unsigned integer in hexadecimal form
+                unsigned int value;
+                parsed_chars = str_to_uint(buf_cursor, 16, true, &value);
                 if (parsed_chars > 0) {
-                    args = copied_args;
+                    if (!assignment_suppression) {
+                        unsigned int *ptr = va_arg(args, unsigned int *);
+                        *ptr = value;
+                        count++;
+                    }
                     buf_cursor += parsed_chars;
-                    count++;
                 }
-                break;
+            } break;
             case Fmt_f: // Floating point
             case Fmt_e:
             case Fmt_g:
-            case Fmt_a:
-                parsed_chars = str_to_float(buf_cursor, true, va_arg(copied_args, float *));
+            case Fmt_a: {
+                float value;
+                parsed_chars = str_to_float(buf_cursor, true, &value);
                 if (parsed_chars > 0) {
-                    args = copied_args;
+                    if (!assignment_suppression) {
+                        float *ptr = va_arg(args, float *);
+                        *ptr = value;
+                        count++;
+                    }
                     buf_cursor += parsed_chars;
+                }
+            } break;
+            case Fmt_c: { // Character
+                if (!assignment_suppression) {
+                    char *str = va_arg(args, char *);
+                    *str = *buf_cursor;
                     count++;
                 }
-                break;
-            case Fmt_c: { // Character
-                char *str = va_arg(args, char *);
-                *str = *buf_cursor;
                 ADVANCE_CURSOR(buf_cursor);
-                count++;
             } break;
             case Fmt_s: { // String
                 SKIP_WHITESPACES(buf_cursor);
-                char *str = va_arg(args, char *);
+                char *str = NULL;
+                if (!assignment_suppression) {
+                    str = va_arg(args, char *);
+                }
                 while ((*buf_cursor != '\0') && !isspace(*buf_cursor)) {
-                    *str = *buf_cursor;
-                    str++;
+                    if (!assignment_suppression) {
+                        *str = *buf_cursor;
+                        str++;
+                    }
                     ADVANCE_CURSOR(buf_cursor);
                 }
-                *str = '\0';
-                count++;
-            } break;
-            case Fmt_p: // Pointer
-                parsed_chars = str_to_ptr(buf_cursor, 16, true, va_arg(copied_args, void *));
-                if (parsed_chars > 0) {
-                    args = copied_args;
-                    buf_cursor += parsed_chars;
+                if (!assignment_suppression) {
+                    *str = '\0';
                     count++;
                 }
-                break;
+            } break;
+            case Fmt_p: { // Pointer
+                void *value;
+                parsed_chars = str_to_ptr(buf_cursor, 16, true, (uintptr_t *)&value);
+                if (parsed_chars > 0) {
+                    if (!assignment_suppression) {
+                        void **ptr = va_arg(args, void *);
+                        *ptr = value;
+                        count++;
+                    }
+                    buf_cursor += parsed_chars;
+                }
+            } break;
             case Fmt_n: { // Return the number of characters consumed so far
+                // Assignment suppression and length modifiers are not implemented for %n
                 int *consumed = va_arg(args, int *);
                 *consumed = (int)(buf_cursor-buf);
             } break;
+            // TODO: Implement scansets. Example: %[abc], %[^0-9]
             case Fmt_percent:
                 SKIP_WHITESPACES(buf_cursor);
                 if (*buf_cursor != '%') {
