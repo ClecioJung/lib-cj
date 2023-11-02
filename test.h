@@ -40,10 +40,12 @@
 
 #define EXPECT_PTR(value, to_equal) expect_ptr(__FILE__, __LINE__, value, to_equal)
 #define EXPECT_CHAR(value, to_equal) expect_char(__FILE__, __LINE__, value, to_equal)
+#define EXPECT_SHORT(value, to_equal) expect_short(__FILE__, __LINE__, value, to_equal)
 #define EXPECT_INT(value, to_equal) expect_int(__FILE__, __LINE__, value, to_equal)
 #define EXPECT_LONG(value, to_equal) expect_long(__FILE__, __LINE__, value, to_equal)
 #define EXPECT_LLONG(value, to_equal) expect_llong(__FILE__, __LINE__, value, to_equal)
 #define EXPECT_UCHAR(value, to_equal) expect_uchar(__FILE__, __LINE__, value, to_equal)
+#define EXPECT_USHORT(value, to_equal) expect_ushort(__FILE__, __LINE__, value, to_equal)
 #define EXPECT_UINT(value, to_equal) expect_uint(__FILE__, __LINE__, value, to_equal)
 #define EXPECT_ULONG(value, to_equal) expect_ulong(__FILE__, __LINE__, value, to_equal)
 #define EXPECT_ULLONG(value, to_equal) expect_ullong(__FILE__, __LINE__, value, to_equal)

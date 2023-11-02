@@ -8,7 +8,7 @@ endif
 CFLAGS := -W -Wall -Wextra -pedantic \
           -Wconversion -Wswitch-enum \
           -Wno-nonnull -Wno-nonnull-compare -Wno-format \
-          -flto -std=c11
+          -flto -std=c11 -O0
 
 # List of functions linked from libcj or libc
 FUNCTIONS := tolower toupper \
@@ -18,7 +18,7 @@ FUNCTIONS := tolower toupper \
 			 strstr strtok memset strlen \
 			 atoi atol atoll strtol strtoll strtoul strtoull \
 			 atof strtof strtod strtold \
-             snprintf
+             snprintf sscanf
 
 # Function that uses nm to check if a function name (2nd argument) is undefined in a object file (1st argument)
 is_undefined = $(if $(shell nm -uj "$(1)" | grep "$(2)"),undefined)

@@ -1218,8 +1218,15 @@ static void check_snprintf(void)
 static void check_sscanf(void)
 {
     char char1, char2;
+    short short1, short2;
     int int1, int2, int3;
+    long long1, long2;
+    long long llong1, llong2;
+    unsigned char uchar1, uchar2;
+    unsigned short ushort1, ushort2;
     unsigned int uint1, uint2, uint3;
+    unsigned long ulong1, ulong2;
+    unsigned long long ullong1, ullong2;
     float float1, float2, float3;
     char str1[32], str2[32];
     void *ptr1, *ptr2;
@@ -1253,6 +1260,9 @@ static void check_sscanf(void)
     EXPECT_INT(sscanf("1,2,3", " %d,%*d,%d", &int1, &int2), 2);
     EXPECT_INT(int1, 1);
     EXPECT_INT(int2, 3);
+    EXPECT_INT(sscanf("-2147483648, 2147483647", " %d,%d", &int1, &int2), 2);
+    EXPECT_INT(int1, INT_MIN);
+    EXPECT_INT(int2, INT_MAX);
     // Signed integer in decimal, hexadecimal or octal base
     EXPECT_INT(sscanf("0xff  0156 69", " %i %i %i", &int1, &int2, &int3), 3);
     EXPECT_INT(int1, 255);
@@ -1368,19 +1378,51 @@ static void check_sscanf(void)
     EXPECT_STR(str2, "there!");
     // Pointer
     EXPECT_INT(sscanf("0x8000ffff ffff8000", " %p %p", &ptr1, &ptr2), 2);
-    EXPECT_PTR(ptr1, (void *)0x8000ffff);
-    EXPECT_PTR(ptr2, (void *)0xffff8000);
+    EXPECT_PTR(ptr1, (void *)0x8000ffffULL);
+    EXPECT_PTR(ptr2, (void *)0xffff8000ULL);
     EXPECT_INT(sscanf(" -0x80001000 +10008000", "%p %p", &ptr1, &ptr2), 2);
     EXPECT_PTR(ptr1, (void *)-0x80001000ULL);
-    EXPECT_PTR(ptr2, (void *)0x10008000);
+    EXPECT_PTR(ptr2, (void *)0x10008000ULL);
     // The number of characters consumed so far
     EXPECT_INT(sscanf("0x8000fffe -52.2e-6 string", "%n %p %f %n %s%n", &int1, &ptr1, &float1, &int2, str1, &int3), 3);
-    EXPECT_PTR(ptr1, (void *)0x8000fffe);
+    EXPECT_PTR(ptr1, (void *)0x8000fffeULL);
     EXPECT_FLOAT(float1, -52.2e-6f);
     EXPECT_STR(str1, "string");
     EXPECT_INT(int1, 0);
     EXPECT_INT(int2, 20);
     EXPECT_INT(int3, 26);
+    // Signed char
+    EXPECT_INT(sscanf("-128, 127", " %hhd,%hhd", &char1, &char2), 2);
+    EXPECT_CHAR(char1, CHAR_MIN);
+    EXPECT_CHAR(char2, CHAR_MAX);
+    // Signed short
+    EXPECT_INT(sscanf("-32768, 32767", " %hd,%hd", &short1, &short2), 2);
+    EXPECT_SHORT(short1, SHRT_MIN);
+    EXPECT_SHORT(short2, SHRT_MAX);
+    // Signed long int
+    EXPECT_INT(sscanf("-9223372036854775808, 9223372036854775807", " %ld,%ld", &long1, &long2), 2);
+    EXPECT_LONG(long1, LONG_MIN);
+    EXPECT_LONG(long2, LONG_MAX);
+    // Signed long long int
+    EXPECT_INT(sscanf("-9223372036854775808, 9223372036854775807", " %lld,%lld", &llong1, &llong2), 2);
+    EXPECT_LLONG(llong1, LLONG_MIN);
+    EXPECT_LLONG(llong2, LLONG_MAX);
+    // Unsigned char
+    EXPECT_INT(sscanf("-128, 255", " %hhu,%hhu", &uchar1, &uchar2), 2);
+    EXPECT_UCHAR(uchar1, (unsigned char)CHAR_MIN);
+    EXPECT_UCHAR(uchar2, UCHAR_MAX);
+    // Unsigned short
+    EXPECT_INT(sscanf("-32768, 65535", " %hu,%hu", &ushort1, &ushort2), 2);
+    EXPECT_USHORT(ushort1, (unsigned short)SHRT_MIN);
+    EXPECT_USHORT(ushort2, USHRT_MAX);
+    // Unsigned long int
+    EXPECT_INT(sscanf("-9223372036854775808, 18446744073709551615", " %lu,%lu", &ulong1, &ulong2), 2);
+    EXPECT_ULONG(ulong1, (unsigned long)LONG_MIN);
+    EXPECT_ULONG(ulong2, ULONG_MAX);
+    // Unsigned long long int
+    EXPECT_INT(sscanf("-9223372036854775808, 18446744073709551615", " %llu,%llu", &ullong1, &ullong2), 2);
+    EXPECT_ULLONG(ullong1, (unsigned long long)LLONG_MIN);
+    EXPECT_ULLONG(ullong2, ULLONG_MAX);
 }
 
 static void check_stdio(void)
