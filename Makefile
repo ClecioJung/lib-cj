@@ -41,10 +41,10 @@ endef
 
 all: test_libc test_libcj
 
-test_libc: main.c Makefile
+test_libc: main.c test.h Makefile
 	$(CC) $(CFLAGS) $(filter %.c %.s %.o,$^) -o $@
 
-test_libcj: main.c libcj.c libcj.h Makefile
+test_libcj: main.c libcj.c libcj.h test.h Makefile
 	$(CC) $(CFLAGS) $(filter %.c %.s %.o,$^) -o $@ -DUSE_LIB_CJ
 
 # ----------------------------------------

@@ -79,6 +79,20 @@
         }                       \
     } while (0)
 
+#define SKIP_WHITESPACES(buf)   \
+    do {                        \
+        while (isspace(*buf)) { \
+            buf++;              \
+        }                       \
+    } while (0)
+
+#define ADVANCE_CURSOR(cursor)  \
+    do {                        \
+        if (*cursor != '\0') {  \
+            cursor++;           \
+        }                       \
+    } while (0)
+
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define ABS(x)    (((x) >= 0) ? (x) : -(x))
@@ -124,6 +138,7 @@ enum Fmt_Flags {
     static int name ( \
         const char *const str, \
         int base, \
+        const bool ignore_whitespaces, \
         type *const value) \
     { \
         int index = 0; \
@@ -131,6 +146,11 @@ enum Fmt_Flags {
         *value = zero; \
         if ((base < 0) || (base > 36)) { \
             return 0; \
+        } \
+        if (ignore_whitespaces) { \
+            while (isspace(str[index])) { \
+                index++; \
+            } \
         } \
         if ((str[index] == '+') || (str[index] == '-')) { \
             negative = str[index] == '-'; \
@@ -189,6 +209,7 @@ CREATE_STR_TO_INT_FN(str_to_llong, long long, 0LL, LLONG_MAX, LLONG_MIN)
 CREATE_STR_TO_INT_FN(str_to_uint, unsigned int, (unsigned int)0, UINT_MAX, (unsigned int)0)
 CREATE_STR_TO_INT_FN(str_to_ulong, unsigned long, 0UL, ULONG_MAX, 0UL)
 CREATE_STR_TO_INT_FN(str_to_ullong, unsigned long long, 0ULL, ULLONG_MAX, 0ULL)
+CREATE_STR_TO_INT_FN(str_to_ptr, uintptr_t, (uintptr_t)0, UINTPTR_MAX, (uintptr_t)0)
 
 // Generic function to convert integer numbers to string
 // Return the amount of characters that would have been written if we had enough size
@@ -418,13 +439,18 @@ static int double_to_str(char **buf, size_t *const sz,
 
 // It returns the amount of characters consumed
 #define CREATE_STR_TO_FLOAT_FN(name, type, zero, max, fn) \
-    int name(const char *const str, type *const value) { \
+    int name(const char *const str, const bool ignore_whitespaces, type *const value) { \
         const int base = 10; \
         bool dotted = false; \
         int exponent = 0; \
         int index = 0; \
         bool negative = false; \
         *value = zero; \
+        if (ignore_whitespaces) { \
+            while (isspace(str[index])) { \
+                index++; \
+            } \
+        } \
         if ((str[index] == '+') || (str[index] == '-')) { \
             negative = str[index] == '-'; \
             index++; \
@@ -451,9 +477,9 @@ static int double_to_str(char **buf, size_t *const sz,
         } \
         if (tolower(str[index]) == 'e') { \
             int exp; \
-            const int parsed = str_to_int(&str[index+1], base, &exp); \
+            const int parsed = str_to_int(&str[index+1], base, false, &exp); \
             if (parsed > 0) { \
-                index += parsed; \
+                index += parsed + 1; \
                 if (exponent > 0) { \
                     exponent = ((INT_MAX - exponent) < exp) ? INT_MAX : (exponent + exp); \
                 } else { \
@@ -518,7 +544,6 @@ LIBCJ_FN int parse_fmt_flags(const char *const fmt, enum Fmt_Flags *const flags)
     return index;
 }
 
-// TODO: scanf does not have precision
 LIBCJ_FN int parse_width_precision(const char *const fmt, va_list args, int *const width, int *const precision)
 {
     int index = 0;
@@ -526,7 +551,7 @@ LIBCJ_FN int parse_width_precision(const char *const fmt, va_list args, int *con
         index++;
         *width = va_arg(args, int);
     } else {
-        index += str_to_int(&fmt[index], 10, width);
+        index += str_to_int(&fmt[index], 10, false, width);
     }
     if (fmt[index] == '.') {
         index++;
@@ -534,13 +559,12 @@ LIBCJ_FN int parse_width_precision(const char *const fmt, va_list args, int *con
             index++;
             *precision = va_arg(args, int);
         } else {
-            index += str_to_int(&fmt[index], 10, precision);
+            index += str_to_int(&fmt[index], 10, false, precision);
         }
     }
     return index;
 }
 
-// TODO: scanf has a special "flag" asterisk
 LIBCJ_FN int parse_fmt_specifier(const char *const fmt, enum Fmt_Specifier *const specifier, enum Length_Modifier *const modifier, bool *const uppercase)
 {
     int index = 0;
@@ -595,7 +619,9 @@ LIBCJ_FN int parse_fmt_specifier(const char *const fmt, enum Fmt_Specifier *cons
     if (*specifier == Fmt_unknown) {
         return 0;
     }
-    *uppercase = isupper(fmt[index]);
+    if (uppercase != NULL) {
+        *uppercase = isupper(fmt[index]);
+    }
     // Return the amount of characters parsed
     return (index + 1);
 }
@@ -1173,11 +1199,8 @@ char *strsep(char **str, const char *delimiters)
 #define CREATE_ATOI_FN(name, type, fn) \
     type name(const char *str) \
     { \
-        while ((*str != '\0') && isspace(*str)) { \
-            str++; \
-        } \
         type value; \
-        fn(str, 10, &value); \
+        fn(str, 10, true, &value); \
         return value; \
     }
 
@@ -1189,11 +1212,8 @@ CREATE_ATOI_FN(atoll, long long, str_to_llong)
 #define CREATE_STRTOI_FN(name, type, fn) \
     type name(const char *str, char **endptr, int base) \
     { \
-        while ((*str != '\0') && isspace(*str)) { \
-            str++; \
-        } \
         type value; \
-        const int parsed = fn(str, base, &value); \
+        const int parsed = fn(str, base, true, &value); \
         if (endptr != NULL) { \
             *endptr = (char *)str + parsed; \
         } \
@@ -1210,11 +1230,8 @@ CREATE_STRTOI_FN(strtoull, unsigned long long, str_to_ullong)
 // Convert string to double
 double atof(const char *str)
 {
-    while ((*str != '\0') && isspace(*str)) {
-        str++;
-    }
     double value;
-    str_to_double(str, &value);
+    str_to_double(str, true, &value);
     return value;
 }
 
@@ -1222,11 +1239,8 @@ double atof(const char *str)
 #define CREATE_STRTOF_FN(name, type, fn) \
     type name(const char *str, char **endptr) \
     { \
-        while ((*str != '\0') && isspace(*str)) { \
-            str++; \
-        } \
         type value; \
-        const int parsed = fn(str, &value); \
+        const int parsed = fn(str, true, &value); \
         if (endptr != NULL) { \
             *endptr = (char *)str + parsed; \
         } \
@@ -1286,11 +1300,134 @@ int sscanf(const char *buf, const char *fmt, ...)
 // Read formatted data from string into variable argument list
 int vsscanf(const char *buf, const char *fmt, va_list args)
 {
-    (void)buf;
-    (void)fmt;
-    (void)args;
-    // TODO: Not implemented yet
-    return 0;
+    enum Length_Modifier modifier; // TODO: Handle type modifiers
+    int count = 0;
+    const char *cursor = fmt;
+    const char *buf_cursor = buf;
+    if (fmt == NULL) {
+        return -1;
+    }
+    while (*cursor != '\0') {
+        enum Fmt_Specifier specifier = Fmt_unknown;
+        //int width = -1;
+        if (*cursor == '%') {
+            va_list copied_args;
+            va_copy(copied_args, args);
+            int parsed_chars = 1; // Start with one character parsed ('%')
+            // sscanf format specifier follows this pattern:
+            // %[*][width][length]specifier
+            // https://cplusplus.com/reference/cstdio/scanf/
+            parsed_chars += parse_fmt_specifier((cursor+parsed_chars), &specifier, &modifier, NULL);
+            // If the format specifier was fully parsed, update the cursor position and args
+            if (specifier != Fmt_unknown) {
+                args = copied_args; // TODO: Update count if any args were parsed
+                cursor += parsed_chars;
+            }
+            switch (specifier) {
+            case Fmt_d: // Signed integer in decimal base
+                // TODO: Create a macro like this: PROCESS_ARG(str_to_int(buf_cursor, 10, va_arg(copied_args, int *)))
+                parsed_chars = str_to_int(buf_cursor, 10, true, va_arg(copied_args, int *));
+                if (parsed_chars > 0) {
+                    args = copied_args;
+                    buf_cursor += parsed_chars;
+                    count++;
+                }
+                break;
+            case Fmt_i: // Signed integer in decimal, hexadecimal or octal base
+                parsed_chars = str_to_int(buf_cursor, 0, true, va_arg(copied_args, int *));
+                if (parsed_chars > 0) {
+                    args = copied_args;
+                    buf_cursor += parsed_chars;
+                    count++;
+                }
+                break;
+            case Fmt_u: // Unsigned integer
+                parsed_chars = str_to_uint(buf_cursor, 10, true, va_arg(copied_args, unsigned int *));
+                if (parsed_chars > 0) {
+                    args = copied_args;
+                    buf_cursor += parsed_chars;
+                    count++;
+                }
+                break;
+            case Fmt_o: // Unsigned integer in octal form
+                parsed_chars = str_to_uint(buf_cursor, 8, true, va_arg(copied_args, unsigned int *));
+                if (parsed_chars > 0) {
+                    args = copied_args;
+                    buf_cursor += parsed_chars;
+                    count++;
+                }
+                break;
+            case Fmt_x: // Unsigned integer in hexadecimal form
+                parsed_chars = str_to_uint(buf_cursor, 16, true, va_arg(copied_args, unsigned int *));
+                if (parsed_chars > 0) {
+                    args = copied_args;
+                    buf_cursor += parsed_chars;
+                    count++;
+                }
+                break;
+            case Fmt_f: // Floating point
+            case Fmt_e:
+            case Fmt_g:
+            case Fmt_a:
+                parsed_chars = str_to_float(buf_cursor, true, va_arg(copied_args, float *));
+                if (parsed_chars > 0) {
+                    args = copied_args;
+                    buf_cursor += parsed_chars;
+                    count++;
+                }
+                break;
+            case Fmt_c: { // Character
+                char *str = va_arg(args, char *);
+                *str = *buf_cursor;
+                ADVANCE_CURSOR(buf_cursor);
+                count++;
+            } break;
+            case Fmt_s: { // String
+                SKIP_WHITESPACES(buf_cursor);
+                char *str = va_arg(args, char *);
+                while ((*buf_cursor != '\0') && !isspace(*buf_cursor)) {
+                    *str = *buf_cursor;
+                    str++;
+                    ADVANCE_CURSOR(buf_cursor);
+                }
+                *str = '\0';
+                count++;
+            } break;
+            case Fmt_p: // Pointer
+                parsed_chars = str_to_ptr(buf_cursor, 16, true, va_arg(copied_args, void *));
+                if (parsed_chars > 0) {
+                    args = copied_args;
+                    buf_cursor += parsed_chars;
+                    count++;
+                }
+                break;
+            case Fmt_n: { // Return the number of characters consumed so far
+                int *consumed = va_arg(args, int *);
+                *consumed = (int)(buf_cursor-buf);
+            } break;
+            case Fmt_percent:
+                SKIP_WHITESPACES(buf_cursor);
+                if (*buf_cursor != '%') {
+                    goto vsscanf_end;
+                }
+                ADVANCE_CURSOR(buf_cursor);
+                break;
+            case Fmt_unknown:
+                break;
+            }
+        } else if (isspace(*cursor)) {
+            SKIP_WHITESPACES(buf_cursor);
+            cursor++;
+        } else {
+            if (*cursor != *buf_cursor) {
+                goto vsscanf_end;
+            }
+            ADVANCE_CURSOR(buf_cursor);
+            cursor++;
+        }
+    }
+vsscanf_end:
+    return count;
 }
 
 //------------------------------------------------------------------------------

@@ -27,9 +27,11 @@
 #ifndef __TEST_H
 #define __TEST_H
 
-#include <math.h>
-#include <stdio.h>
-#include <stdlib.h>
+// Header only library
+// Define the macro TEST_IMPLEMENTATION in one of your C/C++ files to include
+// the implementation of the functions here defined
+// You may want to include the headers math.h, stdio.h and stdlib.h in order to
+// use this library.
 
 // TODO: Introduce a function to escape special chars
 #define EXPECT_STR(value, to_equal) expect_str(__FILE__, __LINE__, value, to_equal)
