@@ -67,21 +67,6 @@
 #define VALUE_TO_CHAR(value, uppercase) \
     (((value) < 10) ? ((value) + '0') : (value - 10 + ((uppercase) ? 'A' : 'a')))
 
-// Helper macro used to simplify code in vsscanf
-// Overflow in this situation is undefined behavior according to C-standard
-#define SCANF_HANDLE_NUMBER(type, str_to_type_fn, base, save_arg_fn) \
-    do {                                                             \
-        type value;                                                  \
-        parsed_chars = str_to_type_fn(buf_cursor, base, &value);     \
-        if (parsed_chars > 0) {                                      \
-            if (!assignment_suppression) {                           \
-                save_arg_fn(args, modifier, value);                  \
-                count++;                                             \
-            }                                                        \
-            buf_cursor += parsed_chars;                              \
-        }                                                            \
-    } while (0)
-
 #define PUTCHAR(c)              \
     do {                        \
         if (sz == NULL) {       \
@@ -513,17 +498,15 @@ static int double_to_str(char **buf, size_t *const sz,
 
 // It returns the amount of characters consumed
 #define CREATE_STR_TO_FLOAT_FN(name, type, zero, max, fn) \
-    static int name(const char *const str, const bool ignore_whitespaces, type *const value) { \
+    static int name(const char *const str, type *const value) { \
         const int base = 10; \
         bool dotted = false; \
         int exponent = 0; \
         int index = 0; \
         bool negative = false; \
         *value = zero; \
-        if (ignore_whitespaces) { \
-            while (isspace(str[index])) { \
-                index++; \
-            } \
+        while (isspace(str[index])) { \
+            index++; \
         } \
         if ((str[index] == '+') || (str[index] == '-')) { \
             negative = str[index] == '-'; \
@@ -1383,7 +1366,7 @@ CREATE_STRTOI_FN(strtoull, unsigned long long, str_to_ullong)
 double atof(const char *str)
 {
     double value;
-    str_to_double(str, true, &value);
+    str_to_double(str, &value);
     return value;
 }
 
@@ -1392,7 +1375,7 @@ double atof(const char *str)
     type name(const char *str, char **endptr) \
     { \
         type value; \
-        const int parsed = fn(str, true, &value); \
+        const int parsed = fn(str, &value); \
         if (endptr != NULL) { \
             *endptr = (char *)str + parsed; \
         } \
@@ -1449,6 +1432,34 @@ int sscanf(const char *buf, const char *fmt, ...)
     return count;
 }
 
+// Helper macros used to simplify code in vsscanf
+// Overflow in this situation is undefined behavior according to C-standard
+#define SCANF_HANDLE_NUMBER(type, str_to_type_fn, save_arg_fn) \
+    do {                                                       \
+        type value;                                            \
+        parsed_chars = str_to_type_fn(buf_cursor, &value);     \
+        if (parsed_chars > 0) {                                \
+            if (!assignment_suppression) {                     \
+                save_arg_fn(args, modifier, value);            \
+                count++;                                       \
+            }                                                  \
+            buf_cursor += parsed_chars;                        \
+        }                                                      \
+    } while (0)
+
+#define SCANF_HANDLE_NUMBER_BASE(type, str_to_type_fn, save_arg_fn, base) \
+    do {                                                                  \
+        type value;                                                       \
+        parsed_chars = str_to_type_fn(buf_cursor, base, &value);          \
+        if (parsed_chars > 0) {                                           \
+            if (!assignment_suppression) {                                \
+                save_arg_fn(args, modifier, value);                       \
+                count++;                                                  \
+            }                                                             \
+            buf_cursor += parsed_chars;                                   \
+        }                                                                 \
+    } while (0)
+
 // Read formatted data from string into variable argument list
 int vsscanf(const char *buf, const char *fmt, va_list args)
 {
@@ -1480,34 +1491,29 @@ int vsscanf(const char *buf, const char *fmt, va_list args)
             }
             switch (specifier) {
             case Fmt_d: // Signed integer in decimal base
-                SCANF_HANDLE_NUMBER(intmax_t, str_to_intmax, 10, save_int_arg);
+                SCANF_HANDLE_NUMBER_BASE(intmax_t, str_to_intmax, save_int_arg, 10);
                 break;
             case Fmt_i: // Signed integer in decimal, hexadecimal or octal base
-                SCANF_HANDLE_NUMBER(intmax_t, str_to_intmax, 0, save_int_arg);
+                SCANF_HANDLE_NUMBER_BASE(intmax_t, str_to_intmax, save_int_arg, 0);
                 break;
             case Fmt_u: // Unsigned integer
-                SCANF_HANDLE_NUMBER(uintmax_t, str_to_uintmax, 10, save_uint_arg);
+                SCANF_HANDLE_NUMBER_BASE(uintmax_t, str_to_uintmax, save_uint_arg, 10);
                 break;
             case Fmt_o: // Unsigned integer in octal form
-                SCANF_HANDLE_NUMBER(uintmax_t, str_to_uintmax, 8, save_uint_arg);
+                SCANF_HANDLE_NUMBER_BASE(uintmax_t, str_to_uintmax, save_uint_arg, 8);
                 break;
             case Fmt_x: // Unsigned integer in hexadecimal form
-                SCANF_HANDLE_NUMBER(uintmax_t, str_to_uintmax, 16, save_uint_arg);
+                SCANF_HANDLE_NUMBER_BASE(uintmax_t, str_to_uintmax, save_uint_arg, 16);
+                break;
+            case Fmt_p: // Pointer
+                SCANF_HANDLE_NUMBER_BASE(uintptr_t, str_to_ptr, save_ptr_arg, 16);
                 break;
             case Fmt_f: // Floating point
             case Fmt_e:
             case Fmt_g:
-            case Fmt_a: {
-                double value;
-                parsed_chars = str_to_double(buf_cursor, true, &value);
-                if (parsed_chars > 0) {
-                    if (!assignment_suppression) {
-                        save_float_arg(args, modifier, value);
-                        count++;
-                    }
-                    buf_cursor += parsed_chars;
-                }
-            } break;
+            case Fmt_a:
+                SCANF_HANDLE_NUMBER(double, str_to_double, save_float_arg);
+                break;
             case Fmt_c: { // Character
                 if (!assignment_suppression) {
                     char *str = va_arg(args, char *);
@@ -1534,9 +1540,6 @@ int vsscanf(const char *buf, const char *fmt, va_list args)
                     count++;
                 }
             } break;
-            case Fmt_p: // Pointer
-                SCANF_HANDLE_NUMBER(uintptr_t, str_to_ptr, 16, save_ptr_arg);
-                break;
             case Fmt_n: { // Return the number of characters consumed so far
                 // Assignment suppression and length modifiers are not implemented for %n
                 int *consumed = va_arg(args, int *);
