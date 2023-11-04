@@ -193,7 +193,6 @@ LIBCJ_FN int str_to_sign_integer(const char *const str, const int width, int *co
 
 // This macro defines a function that parses a sign integer
 // using bases from 0 to 36
-// Leading spaces are ignored
 // If width is greather than zero, it parses at most width characters
 // It returns the amount of characters consumed
 #define CREATE_STR_TO_INT_FN(name, type, zero, max, min) \
@@ -208,9 +207,6 @@ LIBCJ_FN int str_to_sign_integer(const char *const str, const int width, int *co
         *value = zero; \
         if ((base < 0) || (base > 36)) { \
             return 0; \
-        } \
-        while (isspace(str[index])) { \
-            index++; \
         } \
         if (width >= 0) { \
             width += index; \
@@ -503,7 +499,6 @@ static int double_to_str(char **buf, size_t *const sz,
 }
 
 // This macro defines a function that parses a floating point number with base 10
-// Leading spaces are ignored
 // It returns the amount of characters consumed
 // If width is greather than zero, it parses at most width characters
 #define CREATE_STR_TO_FLOAT_FN(name, type, zero, max, fn) \
@@ -514,9 +509,6 @@ static int double_to_str(char **buf, size_t *const sz,
         int index = 0; \
         bool negative = false; \
         *value = zero; \
-        while (isspace(str[index])) { \
-            index++; \
-        } \
         if (width >= 0) { \
             width += index; \
         } \
@@ -1347,6 +1339,7 @@ char *strsep(char **str, const char *delimiters)
     type name(const char *str) \
     { \
         type value; \
+        SKIP_WHITESPACES(str); \
         fn(str, -1, 10, &value); \
         return value; \
     }
@@ -1360,6 +1353,7 @@ CREATE_ATOI_FN(atoll, long long, str_to_llong)
     type name(const char *str, char **endptr, int base) \
     { \
         type value; \
+        SKIP_WHITESPACES(str); \
         const int parsed = fn(str, -1, base, &value); \
         if (endptr != NULL) { \
             *endptr = (char *)str + parsed; \
@@ -1378,6 +1372,7 @@ CREATE_STRTOI_FN(strtoull, unsigned long long, str_to_ullong)
 double atof(const char *str)
 {
     double value;
+    SKIP_WHITESPACES(str);
     str_to_double(str, -1, &value);
     return value;
 }
@@ -1387,6 +1382,7 @@ double atof(const char *str)
     type name(const char *str, char **endptr) \
     { \
         type value; \
+        SKIP_WHITESPACES(str); \
         const int parsed = fn(str, -1, &value); \
         if (endptr != NULL) { \
             *endptr = (char *)str + parsed; \
@@ -1446,30 +1442,34 @@ int sscanf(const char *buf, const char *fmt, ...)
 
 // Helper macros used to simplify code in vsscanf
 // Overflow in this situation is undefined behavior according to C-standard
-#define SCANF_HANDLE_NUMBER(type, str_to_type_fn, save_arg_fn)    \
-    do {                                                          \
-        type value;                                               \
-        parsed_chars = str_to_type_fn(buf_cursor, width, &value); \
-        if (parsed_chars > 0) {                                   \
-            if (!assignment_suppression) {                        \
-                save_arg_fn(args, modifier, value);               \
-                count++;                                          \
-            }                                                     \
-            buf_cursor += parsed_chars;                           \
-        }                                                         \
+#define SCANF_HANDLE_NUMBER(type, str_to_type_fn, save_arg_fn)              \
+    do {                                                                    \
+        type value;                                                         \
+        SKIP_WHITESPACES(buf_cursor);                                       \
+        const int parsed_chars = str_to_type_fn(buf_cursor, width, &value); \
+        if (parsed_chars == 0) {                                            \
+            goto vsscanf_error;                                             \
+        }                                                                   \
+        if (!assignment_suppression) {                                      \
+            save_arg_fn(args, modifier, value);                             \
+            count++;                                                        \
+        }                                                                   \
+        buf_cursor += parsed_chars;                                         \
     } while (0)
 
-#define SCANF_HANDLE_NUMBER_BASE(type, str_to_type_fn, save_arg_fn, base) \
-    do {                                                                  \
-        type value;                                                       \
-        parsed_chars = str_to_type_fn(buf_cursor, width, base, &value);   \
-        if (parsed_chars > 0) {                                           \
-            if (!assignment_suppression) {                                \
-                save_arg_fn(args, modifier, value);                       \
-                count++;                                                  \
-            }                                                             \
-            buf_cursor += parsed_chars;                                   \
-        }                                                                 \
+#define SCANF_HANDLE_NUMBER_BASE(type, str_to_type_fn, save_arg_fn, base)         \
+    do {                                                                          \
+        type value;                                                               \
+        SKIP_WHITESPACES(buf_cursor);                                             \
+        const int parsed_chars = str_to_type_fn(buf_cursor, width, base, &value); \
+        if (parsed_chars == 0) {                                                  \
+            goto vsscanf_error;                                                   \
+        }                                                                         \
+        if (!assignment_suppression) {                                            \
+            save_arg_fn(args, modifier, value);                                   \
+            count++;                                                              \
+        }                                                                         \
+        buf_cursor += parsed_chars;                                               \
     } while (0)
 
 // Read formatted data from string into variable argument list
@@ -1485,22 +1485,18 @@ int vsscanf(const char *buf, const char *fmt, va_list args)
     while (*cursor != '\0') {
         enum Fmt_Specifier specifier = Fmt_unknown;
         if (*cursor == '%') {
+            cursor++;
             bool assignment_suppression = false;
-            int width = -1;
-            int parsed_chars = 1; // Start with one character parsed ('%')
             // sscanf format specifier follows this pattern:
             // %[*][width][length]specifier
             // https://cplusplus.com/reference/cstdio/scanf/
-            if (*(cursor+parsed_chars) == '*') {
+            if (*cursor == '*') {
                 assignment_suppression = true;
-                parsed_chars++;
+                cursor++;
             }
-            parsed_chars += str_to_natural((cursor+parsed_chars), &width);
-            parsed_chars += parse_fmt_specifier((cursor+parsed_chars), &specifier, &modifier, NULL);
-            // If the format specifier was fully parsed, update the cursor position and args
-            if (specifier != Fmt_unknown) {
-                cursor += parsed_chars;
-            }
+            int width = -1;
+            cursor += str_to_natural(cursor, &width);
+            cursor += parse_fmt_specifier(cursor, &specifier, &modifier, NULL);
             switch (specifier) {
             case Fmt_d: // Signed integer in decimal base
                 SCANF_HANDLE_NUMBER_BASE(intmax_t, str_to_intmax, save_int_arg, 10);
@@ -1528,7 +1524,7 @@ int vsscanf(const char *buf, const char *fmt, va_list args)
                 break;
             case Fmt_c: { // Character
                 char *str = NULL;
-                if (!assignment_suppression) {
+                if (!assignment_suppression && (*buf_cursor != '\0')) {
                     str = va_arg(args, char *);
                     count++;
                 }
@@ -1546,7 +1542,7 @@ int vsscanf(const char *buf, const char *fmt, va_list args)
             case Fmt_s: { // String
                 SKIP_WHITESPACES(buf_cursor);
                 char *str = NULL;
-                if (!assignment_suppression) {
+                if (!assignment_suppression && (*buf_cursor != '\0')) {
                     str = va_arg(args, char *);
                     count++;
                 }
@@ -1575,15 +1571,16 @@ int vsscanf(const char *buf, const char *fmt, va_list args)
             case Fmt_percent:
                 SKIP_WHITESPACES(buf_cursor);
                 if (*buf_cursor != '%') {
-                    goto vsscanf_end;
+                    goto vsscanf_error;
                 }
                 ADVANCE_CURSOR(buf_cursor);
                 break;
             case Fmt_unknown:
-                if (*(cursor+parsed_chars) == '['){
+                if (*cursor == '['){
                     // Handle scansets
                     // TODO: Implement scansets. Example: %[abc], %[^0-9]
                 }
+                cursor++;
                 break;
             }
         } else if (isspace(*cursor)) {
@@ -1598,6 +1595,11 @@ int vsscanf(const char *buf, const char *fmt, va_list args)
         }
     }
 vsscanf_end:
+    return count;
+vsscanf_error:
+    if ((count == 0) && (*buf_cursor == '\0')) {
+        return -1;
+    }
     return count;
 }
 
