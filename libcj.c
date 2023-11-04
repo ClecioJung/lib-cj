@@ -67,6 +67,21 @@
 #define VALUE_TO_CHAR(value, uppercase) \
     (((value) < 10) ? ((value) + '0') : (value - 10 + ((uppercase) ? 'A' : 'a')))
 
+// Helper macro used to simplify code in vsscanf
+// Overflow in this situation is undefined behavior according to C-standard
+#define SCANF_HANDLE_NUMBER(type, str_to_type_fn, base, save_arg_fn) \
+    do {                                                             \
+        type value;                                                  \
+        parsed_chars = str_to_type_fn(buf_cursor, base, &value);     \
+        if (parsed_chars > 0) {                                      \
+            if (!assignment_suppression) {                           \
+                save_arg_fn(args, modifier, value);                  \
+                count++;                                             \
+            }                                                        \
+            buf_cursor += parsed_chars;                              \
+        }                                                            \
+    } while (0)
+
 #define PUTCHAR(c)              \
     do {                        \
         if (sz == NULL) {       \
@@ -731,6 +746,13 @@ LIBCJ_FN void save_uint_arg(va_list args, enum Length_Modifier modifier, uintmax
         *(unsigned int *)ptr = (unsigned int)value;
         break;
     }
+}
+
+LIBCJ_FN void save_ptr_arg(va_list args, enum Length_Modifier modifier, uintptr_t value)
+{
+    (void)modifier;
+    void **ptr = va_arg(args, void *);
+    *ptr = (void *)value;
 }
 
 LIBCJ_FN void save_float_arg(va_list args, enum Length_Modifier modifier, double value)
@@ -1457,63 +1479,21 @@ int vsscanf(const char *buf, const char *fmt, va_list args)
                 cursor += parsed_chars;
             }
             switch (specifier) {
-            case Fmt_d: { // Signed integer in decimal base
-                intmax_t value; // Overflow in this situation is undefined behavior
-                parsed_chars = str_to_intmax(buf_cursor, 10, &value);
-                // TODO: Create a macro like this: PROCESS_ARG(str_to_int(buf_cursor, 10, &value))
-                //parsed_chars = str_to_int(buf_cursor, 10, true, &value);
-                if (parsed_chars > 0) {
-                    if (!assignment_suppression) {
-                        save_int_arg(args, modifier, value);
-                        count++;
-                    }
-                    buf_cursor += parsed_chars;
-                }
-            } break;
-            case Fmt_i: { // Signed integer in decimal, hexadecimal or octal base
-                intmax_t value;
-                parsed_chars = str_to_intmax(buf_cursor, 0, &value);
-                if (parsed_chars > 0) {
-                    if (!assignment_suppression) {
-                        save_int_arg(args, modifier, value);
-                        count++;
-                    }
-                    buf_cursor += parsed_chars;
-                }
-            } break;
-            case Fmt_u: { // Unsigned integer
-                uintmax_t value;
-                parsed_chars = str_to_uintmax(buf_cursor, 10, &value);
-                if (parsed_chars > 0) {
-                    if (!assignment_suppression) {
-                        save_uint_arg(args, modifier, value);
-                        count++;
-                    }
-                    buf_cursor += parsed_chars;
-                }
-            } break;
-            case Fmt_o: { // Unsigned integer in octal form
-                uintmax_t value;
-                parsed_chars = str_to_uintmax(buf_cursor, 8, &value);
-                if (parsed_chars > 0) {
-                    if (!assignment_suppression) {
-                        save_uint_arg(args, modifier, value);
-                        count++;
-                    }
-                    buf_cursor += parsed_chars;
-                }
-            } break;
-            case Fmt_x: { // Unsigned integer in hexadecimal form
-                uintmax_t value;
-                parsed_chars = str_to_uintmax(buf_cursor, 16, &value);
-                if (parsed_chars > 0) {
-                    if (!assignment_suppression) {
-                        save_uint_arg(args, modifier, value);
-                        count++;
-                    }
-                    buf_cursor += parsed_chars;
-                }
-            } break;
+            case Fmt_d: // Signed integer in decimal base
+                SCANF_HANDLE_NUMBER(intmax_t, str_to_intmax, 10, save_int_arg);
+                break;
+            case Fmt_i: // Signed integer in decimal, hexadecimal or octal base
+                SCANF_HANDLE_NUMBER(intmax_t, str_to_intmax, 0, save_int_arg);
+                break;
+            case Fmt_u: // Unsigned integer
+                SCANF_HANDLE_NUMBER(uintmax_t, str_to_uintmax, 10, save_uint_arg);
+                break;
+            case Fmt_o: // Unsigned integer in octal form
+                SCANF_HANDLE_NUMBER(uintmax_t, str_to_uintmax, 8, save_uint_arg);
+                break;
+            case Fmt_x: // Unsigned integer in hexadecimal form
+                SCANF_HANDLE_NUMBER(uintmax_t, str_to_uintmax, 16, save_uint_arg);
+                break;
             case Fmt_f: // Floating point
             case Fmt_e:
             case Fmt_g:
@@ -1554,18 +1534,9 @@ int vsscanf(const char *buf, const char *fmt, va_list args)
                     count++;
                 }
             } break;
-            case Fmt_p: { // Pointer
-                void *value;
-                parsed_chars = str_to_ptr(buf_cursor, 16, (uintptr_t *)&value);
-                if (parsed_chars > 0) {
-                    if (!assignment_suppression) {
-                        void **ptr = va_arg(args, void *);
-                        *ptr = value;
-                        count++;
-                    }
-                    buf_cursor += parsed_chars;
-                }
-            } break;
+            case Fmt_p: // Pointer
+                SCANF_HANDLE_NUMBER(uintptr_t, str_to_ptr, 16, save_ptr_arg);
+                break;
             case Fmt_n: { // Return the number of characters consumed so far
                 // Assignment suppression and length modifiers are not implemented for %n
                 int *consumed = va_arg(args, int *);
