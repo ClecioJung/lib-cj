@@ -131,14 +131,73 @@ enum Fmt_Flags {
 // SOURCE
 //------------------------------------------------------------------------------
 
-// This macro defines a function that parses a sign integer number
+// Parses a string into a natural number (integer greather than zero)
+// Overflows aren't handled
+// If no integer was parsed, the value is kept at its original value
+// It returns the amount of characters consumed
+LIBCJ_FN int str_to_natural(const char *const str, int *const value)
+{
+    const int base = 10;
+    int index = 0;
+    int number = 0;
+    for (; str[index] != '\0'; index++) {
+        if (!isdigit(str[index])) {
+            break;
+        }
+        const int digit = str[index] - '0';
+        number = base * number + digit;
+    }
+    if (index > 0) {
+        *value = number;
+    }
+    return index;
+}
+
+// Parses a string into a sign integer
+// The number may be preceded by optional sign
+// When a positive overflow occurs, the 'value' is set to INT_MAX, and conversely,
+// in the case of negative overflow, 'value' is assigned to INT_MIN
+// It returns the amount of characters consumed
+LIBCJ_FN int str_to_sign_integer(const char *const str, int *const value)
+{
+    const int base = 10;
+    int index = 0;
+    bool negative = false;
+    *value = 0;
+    if ((str[index] == '+') || (str[index] == '-')) {
+        negative = str[index] == '-';
+        index++;
+    }
+    for (; str[index] != '\0'; index++) {
+        if (!isdigit(str[index])) {
+            break;
+        }
+        const int digit = str[index] - '0';
+        if (negative) {
+            if (*value >= INT_MIN / base) {
+                *value = base * (*value) - digit;
+            } else {
+                *value = INT_MIN;
+            }
+        } else {
+            if (*value <= INT_MAX / base) {
+                *value = base * (*value) + digit;
+            } else {
+                *value = INT_MAX;
+            }
+        }
+    }
+    return index;
+}
+
+// This macro defines a function that parses a sign integer
 // using bases from 0 to 36
+// Leading spaces are ignored
 // It returns the amount of characters consumed
 #define CREATE_STR_TO_INT_FN(name, type, zero, max, min) \
-    static int name ( \
+    LIBCJ_FN int name( \
         const char *const str, \
         int base, \
-        const bool ignore_whitespaces, \
         type *const value) \
     { \
         int index = 0; \
@@ -147,10 +206,8 @@ enum Fmt_Flags {
         if ((base < 0) || (base > 36)) { \
             return 0; \
         } \
-        if (ignore_whitespaces) { \
-            while (isspace(str[index])) { \
-                index++; \
-            } \
+        while (isspace(str[index])) { \
+            index++; \
         } \
         if ((str[index] == '+') || (str[index] == '-')) { \
             negative = str[index] == '-'; \
@@ -187,7 +244,7 @@ enum Fmt_Flags {
             } \
             if (negative) { \
                 if (*value >= (min) / (type)base) { \
-                    *value = (type)base * *value - (type)digit; \
+                    *value = (type)base * (*value) - (type)digit; \
                 } else { \
                     *value = (min); \
                 } \
@@ -331,7 +388,7 @@ LIBCJ_FN double rouding_double(const double value, const int base, const int dec
     const double y = scale_radix_exp_double(value, base, decimal_places);
     const double remainder = y - (long)y;
     if (remainder >= 0.5) {
-        const double value_to_add = scale_radix_exp_double((1.0), base, -decimal_places);
+        const double value_to_add = scale_radix_exp_double(1.0, base, -decimal_places);
         return (value + value_to_add);
     }
     return value;
@@ -441,7 +498,7 @@ static int double_to_str(char **buf, size_t *const sz,
 
 // It returns the amount of characters consumed
 #define CREATE_STR_TO_FLOAT_FN(name, type, zero, max, fn) \
-    int name(const char *const str, const bool ignore_whitespaces, type *const value) { \
+    static int name(const char *const str, const bool ignore_whitespaces, type *const value) { \
         const int base = 10; \
         bool dotted = false; \
         int exponent = 0; \
@@ -479,7 +536,7 @@ static int double_to_str(char **buf, size_t *const sz,
         } \
         if (tolower(str[index]) == 'e') { \
             int exp; \
-            const int parsed = str_to_int(&str[index+1], base, false, &exp); \
+            const int parsed = str_to_sign_integer(&str[index+1], &exp); \
             if (parsed > 0) { \
                 index += parsed + 1; \
                 if (exponent > 0) { \
@@ -553,7 +610,7 @@ LIBCJ_FN int parse_width_precision(const char *const fmt, va_list args, int *con
         index++;
         *width = va_arg(args, int);
     } else {
-        index += str_to_int(&fmt[index], 10, false, width);
+        index += str_to_natural(&fmt[index], width);
     }
     if (fmt[index] == '.') {
         index++;
@@ -561,7 +618,7 @@ LIBCJ_FN int parse_width_precision(const char *const fmt, va_list args, int *con
             index++;
             *precision = va_arg(args, int);
         } else {
-            index += str_to_int(&fmt[index], 10, false, precision);
+            index += str_to_natural(&fmt[index], precision);
         }
     }
     return index;
@@ -1273,7 +1330,7 @@ char *strsep(char **str, const char *delimiters)
     type name(const char *str) \
     { \
         type value; \
-        fn(str, 10, true, &value); \
+        fn(str, 10, &value); \
         return value; \
     }
 
@@ -1286,7 +1343,7 @@ CREATE_ATOI_FN(atoll, long long, str_to_llong)
     type name(const char *str, char **endptr, int base) \
     { \
         type value; \
-        const int parsed = fn(str, base, true, &value); \
+        const int parsed = fn(str, base, &value); \
         if (endptr != NULL) { \
             *endptr = (char *)str + parsed; \
         } \
@@ -1393,7 +1450,7 @@ int vsscanf(const char *buf, const char *fmt, va_list args)
                 assignment_suppression = true;
                 parsed_chars++;
             }
-            parsed_chars += str_to_int((cursor+parsed_chars), 10, false, &width);
+            parsed_chars += str_to_natural((cursor+parsed_chars), &width);
             parsed_chars += parse_fmt_specifier((cursor+parsed_chars), &specifier, &modifier, NULL);
             // If the format specifier was fully parsed, update the cursor position and args
             if (specifier != Fmt_unknown) {
@@ -1402,7 +1459,7 @@ int vsscanf(const char *buf, const char *fmt, va_list args)
             switch (specifier) {
             case Fmt_d: { // Signed integer in decimal base
                 intmax_t value; // Overflow in this situation is undefined behavior
-                parsed_chars = str_to_intmax(buf_cursor, 10, true, &value);
+                parsed_chars = str_to_intmax(buf_cursor, 10, &value);
                 // TODO: Create a macro like this: PROCESS_ARG(str_to_int(buf_cursor, 10, &value))
                 //parsed_chars = str_to_int(buf_cursor, 10, true, &value);
                 if (parsed_chars > 0) {
@@ -1415,7 +1472,7 @@ int vsscanf(const char *buf, const char *fmt, va_list args)
             } break;
             case Fmt_i: { // Signed integer in decimal, hexadecimal or octal base
                 intmax_t value;
-                parsed_chars = str_to_intmax(buf_cursor, 0, true, &value);
+                parsed_chars = str_to_intmax(buf_cursor, 0, &value);
                 if (parsed_chars > 0) {
                     if (!assignment_suppression) {
                         save_int_arg(args, modifier, value);
@@ -1426,7 +1483,7 @@ int vsscanf(const char *buf, const char *fmt, va_list args)
             } break;
             case Fmt_u: { // Unsigned integer
                 uintmax_t value;
-                parsed_chars = str_to_uintmax(buf_cursor, 10, true, &value);
+                parsed_chars = str_to_uintmax(buf_cursor, 10, &value);
                 if (parsed_chars > 0) {
                     if (!assignment_suppression) {
                         save_uint_arg(args, modifier, value);
@@ -1437,7 +1494,7 @@ int vsscanf(const char *buf, const char *fmt, va_list args)
             } break;
             case Fmt_o: { // Unsigned integer in octal form
                 uintmax_t value;
-                parsed_chars = str_to_uintmax(buf_cursor, 8, true, &value);
+                parsed_chars = str_to_uintmax(buf_cursor, 8, &value);
                 if (parsed_chars > 0) {
                     if (!assignment_suppression) {
                         save_uint_arg(args, modifier, value);
@@ -1448,7 +1505,7 @@ int vsscanf(const char *buf, const char *fmt, va_list args)
             } break;
             case Fmt_x: { // Unsigned integer in hexadecimal form
                 uintmax_t value;
-                parsed_chars = str_to_uintmax(buf_cursor, 16, true, &value);
+                parsed_chars = str_to_uintmax(buf_cursor, 16, &value);
                 if (parsed_chars > 0) {
                     if (!assignment_suppression) {
                         save_uint_arg(args, modifier, value);
@@ -1499,7 +1556,7 @@ int vsscanf(const char *buf, const char *fmt, va_list args)
             } break;
             case Fmt_p: { // Pointer
                 void *value;
-                parsed_chars = str_to_ptr(buf_cursor, 16, true, (uintptr_t *)&value);
+                parsed_chars = str_to_ptr(buf_cursor, 16, (uintptr_t *)&value);
                 if (parsed_chars > 0) {
                     if (!assignment_suppression) {
                         void **ptr = va_arg(args, void *);
