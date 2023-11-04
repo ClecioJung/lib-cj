@@ -1263,6 +1263,12 @@ static void check_sscanf(void)
     EXPECT_INT(sscanf("-2147483648, 2147483647", " %d,%d", &int1, &int2), 2);
     EXPECT_INT(int1, INT_MIN);
     EXPECT_INT(int2, INT_MAX);
+    EXPECT_INT(sscanf("1500, 10000, 8000", " %4d,%4d,%4d", &int1, &int2, &int3), 2);
+    EXPECT_INT(int1, 1500);
+    EXPECT_INT(int2, 1000);
+    EXPECT_INT(sscanf("-150, +10000, 8000", " %4d,%4d,%4d", &int1, &int2, &int3), 2);
+    EXPECT_INT(int1, -150);
+    EXPECT_INT(int2, 100);
     // Signed integer in decimal, hexadecimal or octal base
     EXPECT_INT(sscanf("0xff  0156 69", " %i %i %i", &int1, &int2, &int3), 3);
     EXPECT_INT(int1, 255);
@@ -1275,6 +1281,12 @@ static void check_sscanf(void)
     EXPECT_INT(sscanf("1,2,3", " %i,%*i,%i", &int1, &int2), 2);
     EXPECT_INT(int1, 1);
     EXPECT_INT(int2, 3);
+    EXPECT_INT(sscanf("1500, 0x10000, 8000", " %4i,%4i,%4i", &int1, &int2, &int3), 2);
+    EXPECT_INT(int1, 1500);
+    EXPECT_INT(int2, 0x10);
+    EXPECT_INT(sscanf("0150, +10000, 8000", " %4i,%4i,%4i", &int1, &int2, &int3), 2);
+    EXPECT_INT(int1, 104);
+    EXPECT_INT(int2, 100);
     // Unsigned integer
     EXPECT_INT(sscanf("165  +156 96", " %u %u %u", &uint1, &uint2, &uint3), 3);
     EXPECT_UINT(uint1, 165);
@@ -1288,26 +1300,44 @@ static void check_sscanf(void)
     EXPECT_INT(sscanf("1,2,3", " %u,%*u,%u", &uint1, &uint2), 2);
     EXPECT_UINT(uint1, 1);
     EXPECT_UINT(uint2, 3);
+    EXPECT_INT(sscanf("1500, 10000, 8000", " %4u,%4u,%4u", &uint1, &uint2, &uint3), 2);
+    EXPECT_UINT(uint1, 1500);
+    EXPECT_UINT(uint2, 1000);
+    EXPECT_INT(sscanf("0150, +10000, 8000", " %4u,%4u,%4u", &uint1, &uint2, &uint3), 2);
+    EXPECT_UINT(uint1, 150);
+    EXPECT_UINT(uint2, 100);
     // Unsigned integer in octal form
     EXPECT_INT(sscanf("0777 777", " %o %o", &uint1, &uint2), 2);
-    EXPECT_UINT(uint1, 511);
-    EXPECT_UINT(uint2, 511);
+    EXPECT_UINT(uint1, 0777);
+    EXPECT_UINT(uint2, 0777);
     EXPECT_INT(sscanf("-156 +15", "%o %o", &uint1, &uint2), 2);
     EXPECT_UINT(uint1, (unsigned int)-110);
     EXPECT_UINT(uint2, 13);
     EXPECT_INT(sscanf("1,2,3", " %o,%*o,%o", &uint1, &uint2), 2);
     EXPECT_UINT(uint1, 1);
     EXPECT_UINT(uint2, 3);
+    EXPECT_INT(sscanf("1500, 010000, 8000", " %4o,%4o,%4o", &uint1, &uint2, &uint3), 2);
+    EXPECT_UINT(uint1, 01500);
+    EXPECT_UINT(uint2, 0100);
+    EXPECT_INT(sscanf("0150, +10000, 8000", " %4o,%4o,%4o", &uint1, &uint2, &uint3), 2);
+    EXPECT_UINT(uint1, 0150);
+    EXPECT_UINT(uint2, 0100);
     // Unsigned integer in hexadecimal form
     EXPECT_INT(sscanf("0xfff fff", " %x %x", &uint1, &uint2), 2);
-    EXPECT_UINT(uint1, 4095);
-    EXPECT_UINT(uint2, 4095);
+    EXPECT_UINT(uint1, 0xfff);
+    EXPECT_UINT(uint2, 0xfff);
     EXPECT_INT(sscanf("-156 +ab", "%x %x", &uint1, &uint2), 2);
     EXPECT_UINT(uint1, (unsigned int)-342);
     EXPECT_UINT(uint2, 171);
     EXPECT_INT(sscanf("1,2,3", " %x,%*x,%x", &uint1, &uint2), 2);
     EXPECT_UINT(uint1, 1);
     EXPECT_UINT(uint2, 3);
+    EXPECT_INT(sscanf("1500, 0x10000, 8000", " %4x,%4x,%4x", &uint1, &uint2, &uint3), 2);
+    EXPECT_UINT(uint1, 0x1500);
+    EXPECT_UINT(uint2, 0x10);
+    EXPECT_INT(sscanf("0150, +10000, 8000", " %4x,%4x,%4x", &uint1, &uint2, &uint3), 2);
+    EXPECT_UINT(uint1, 0x150);
+    EXPECT_UINT(uint2, 0x100);
     // Character
     EXPECT_INT(sscanf("a", "%c", &char1), 1);
     EXPECT_CHAR(char1, 'a');
@@ -1321,6 +1351,11 @@ static void check_sscanf(void)
     EXPECT_INT(sscanf("beta", "%c%*ct%c", &char1, &char2), 2);
     EXPECT_CHAR(char1, 'b');
     EXPECT_CHAR(char2, 'a');
+    EXPECT_INT(sscanf("alphabetagammazeta", "alpha%4cgamma%4c", str1, str2), 2);
+    EXPECT_SIZED_STR(str1, "beta", 4);
+    EXPECT_SIZED_STR(str2, "zeta", 4);
+    EXPECT_INT(sscanf("alpha", "%10c", str1), 1);
+    EXPECT_SIZED_STR(str1, "alpha", 5);
     // Percent character
     EXPECT_INT(sscanf("  % c", "%% %c", &char1), 1);
     EXPECT_CHAR(char1, 'c');
@@ -1367,6 +1402,15 @@ static void check_sscanf(void)
     EXPECT_INT(sscanf("1.1,2.2,3.3", " %f,%*f,%f", &float1, &float2), 2);
     EXPECT_FLOAT(float1, 1.1f);
     EXPECT_FLOAT(float2, 3.3f);
+    EXPECT_INT(sscanf("1.5e3, 1.7e-62, 8000", " %5f,%4f,%4f", &float1, &float2, &float3), 2);
+    EXPECT_FLOAT(float1, 1.5e3f);
+    EXPECT_FLOAT(float2, 1.7f);
+    EXPECT_INT(sscanf("0.3e2, -1.7e-62, 8000", " %5f,%6f,%4f", &float1, &float2, &float3), 2);
+    EXPECT_FLOAT(float1, 0.3e2f);
+    EXPECT_FLOAT(float2, -1.7f);
+    EXPECT_INT(sscanf("0.3, -1.7e-62, 8000", " %4f,%7f,%4f", &float1, &float2, &float3), 2);
+    EXPECT_FLOAT(float1, 0.3f);
+    EXPECT_FLOAT(float2, -1.7e-6f);
     // String
     EXPECT_INT(sscanf("Hello You!", "%s", str1), 1);
     EXPECT_STR(str1, "Hello");
@@ -1376,6 +1420,11 @@ static void check_sscanf(void)
     EXPECT_INT(sscanf("Let's go there!", " %s%*s%s", str1, str2), 2);
     EXPECT_STR(str1, "Let's");
     EXPECT_STR(str2, "there!");
+    EXPECT_INT(sscanf("alphabetagammazeta", "alpha%4sgamma%4s", str1, str2), 2);
+    EXPECT_STR(str1, "beta");
+    EXPECT_STR(str2, "zeta");
+    EXPECT_INT(sscanf("alpha", "%10s", str1), 1);
+    EXPECT_STR(str1, "alpha");
     // Pointer
     EXPECT_INT(sscanf("0x8000ffff ffff8000", " %p %p", &ptr1, &ptr2), 2);
     EXPECT_PTR(ptr1, (void *)0x8000ffffULL);
