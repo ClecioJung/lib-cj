@@ -131,6 +131,43 @@ enum Fmt_Flags {
 // SOURCE
 //------------------------------------------------------------------------------
 
+// Receives a scanset string (not containing the initial open bracket '[')
+// and returns true if the character is in accordance with that scanset
+// If the scanset string ends before a closing bracket ']' is found,
+// false is returned
+// This functions is used by vsscanf
+LIBCJ_FN bool char_in_scanset(const char *scanset, const char c)
+{
+    bool excluded_set = false;
+    if (*scanset == '^') {
+        excluded_set = true;
+        scanset++;
+    }
+    bool found = excluded_set;
+    if (*scanset == ']') {
+        if (c == *scanset) {
+            found = !excluded_set;
+        }
+        scanset++;
+    }
+    for (; *scanset != ']'; scanset++) {
+        if (*scanset == '\0') {
+            return false; // Didn't found closing bracket
+        }
+        if ((*(scanset+1) == '-') && (*(scanset+2) != ']')) {
+            const char range_begin = *scanset;
+            scanset += 2;
+            const char range_end = *scanset;
+            if ((range_begin <= c) && (c <= range_end)) {
+                found = !excluded_set;
+            }
+        } else if (c == *scanset) {
+            found = !excluded_set;
+        }
+    }
+    return found;
+}
+
 // Parses a string into a natural number (integer greather than zero)
 // Overflows aren't handled
 // If no integer was parsed, the value is kept at its original value
@@ -1524,7 +1561,10 @@ int vsscanf(const char *buf, const char *fmt, va_list args)
                 break;
             case Fmt_c: { // Character
                 char *str = NULL;
-                if (!assignment_suppression && (*buf_cursor != '\0')) {
+                if (*buf_cursor == '\0') {
+                    goto vsscanf_error;
+                }
+                if (!assignment_suppression) {
                     str = va_arg(args, char *);
                     count++;
                 }
@@ -1542,7 +1582,10 @@ int vsscanf(const char *buf, const char *fmt, va_list args)
             case Fmt_s: { // String
                 SKIP_WHITESPACES(buf_cursor);
                 char *str = NULL;
-                if (!assignment_suppression && (*buf_cursor != '\0')) {
+                if (*buf_cursor == '\0') {
+                    goto vsscanf_error;
+                }
+                if (!assignment_suppression) {
                     str = va_arg(args, char *);
                     count++;
                 }
@@ -1576,9 +1619,37 @@ int vsscanf(const char *buf, const char *fmt, va_list args)
                 ADVANCE_CURSOR(buf_cursor);
                 break;
             case Fmt_unknown:
+                // Handle scansets
                 if (*cursor == '['){
-                    // Handle scansets
-                    // TODO: Implement scansets. Example: %[abc], %[^0-9]
+                    cursor++;
+                    char *str = NULL;
+                    if (!char_in_scanset(cursor, *buf_cursor)) {
+                        goto vsscanf_error;
+                    }
+                    if (!assignment_suppression) {
+                        str = va_arg(args, char *);
+                        count++;
+                    }
+                    while (char_in_scanset(cursor, *buf_cursor)) {
+                        if (str != NULL) {
+                            *str = *buf_cursor;
+                            str++;
+                        }
+                        buf_cursor++;
+                        if (width > 0) {
+                            width--;
+                            if (width == 0) {
+                                break;
+                            }
+                        }
+                    }
+                    if (str != NULL) {
+                        *str = '\0';
+                    }
+                    // Skips the scanset
+                    while (*cursor != ']') {
+                        cursor++;
+                    }
                 }
                 cursor++;
                 break;
