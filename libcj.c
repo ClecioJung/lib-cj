@@ -115,6 +115,7 @@ enum Fmt_Specifier {
     Fmt_unknown
 };
 
+// sprintf flags
 enum Fmt_Flags {
     Flag_None  = 0x00,
     Flag_Minus = 0x01,
@@ -168,10 +169,18 @@ LIBCJ_FN bool char_in_scanset(const char *scanset, const char c)
     return found;
 }
 
+// Important: Our library currently contains a significant amount of redundancy
+// and duplicated code, particularly within the functions responsible for converting
+// strings into numerical values. Each of these conversion functions possesses
+// distinct characteristics, and the nature of the C language presents challenges
+// in crafting highly efficient code without resorting to repetition. Given this
+// context, I have opted to reimplement these features individually, despite the
+// redundancy, to achieve a higher level of code efficiency.
+
 // Parses a string into a natural number (integer greather than zero)
 // Overflows aren't handled
 // If no integer was parsed, the value is kept at its original value
-// It returns the amount of characters consumed
+// Returns the amount of characters that were consumed
 LIBCJ_FN int str_to_natural(const char *const str, int *const value)
 {
     const int base = 10;
@@ -195,7 +204,7 @@ LIBCJ_FN int str_to_natural(const char *const str, int *const value)
 // When a positive overflow occurs, the 'value' is set to INT_MAX, and conversely,
 // in the case of negative overflow, 'value' is assigned to INT_MIN
 // If width is greather than zero, it parses at most width characters
-// It returns the amount of characters consumed
+// Returns the amount of characters that were consumed
 LIBCJ_FN int str_to_sign_integer(const char *const str, const int width, int *const value)
 {
     const int base = 10;
@@ -228,86 +237,51 @@ LIBCJ_FN int str_to_sign_integer(const char *const str, const int width, int *co
     return index;
 }
 
-// This macro defines a function that parses a sign integer
-// using bases from 0 to 36
+// Generic function to convert string into integers in bases 0, 8, 10 or 16
+// Returns the amount of characters that were consumed
 // If width is greather than zero, it parses at most width characters
-// It returns the amount of characters consumed
-#define CREATE_STR_TO_INT_FN(name, type, zero, max, min) \
-    LIBCJ_FN int name( \
-        const char *const str, \
-        int width, \
-        int base, \
-        type *const value) \
-    { \
-        int index = 0; \
-        bool negative = false; \
-        *value = zero; \
-        if ((base < 0) || (base > 36)) { \
-            return 0; \
-        } \
-        if (width >= 0) { \
-            width += index; \
-        } \
-        if ((str[index] == '+') || (str[index] == '-')) { \
-            negative = str[index] == '-'; \
-            index++; \
-        } \
-        if (str[index] == '0') { \
-            if (str[index+1] == 'x') { \
-                if ((base == 0) || (base == 16)) { \
-                    base = 16; \
-                    index += 2; \
-                } \
-            } else { \
-                if ((base == 0) || (base == 8)) { \
-                    base = 8; \
-                    index++; \
-                } \
-            } \
-        } \
-        if (base == 0) { \
-            base = 10; \
-        } \
-        for (; ((width < 0) || (index < width)) && (str[index] != '\0'); index++) { \
-            const char c = str[index]; \
-            int digit = 0; \
-            if (isdigit(c)) { \
-                digit = c - '0'; \
-            } else if ((base > 10) && isalpha(c)) { \
-                digit = tolower(c) - 'a' + 10; \
-            } else { \
-                break; \
-            } \
-            if (digit >= base) { \
-                break; \
-            } \
-            if (negative) { \
-                if (*value >= (min) / (type)base) { \
-                    *value = (type)base * (*value) - (type)digit; \
-                } else { \
-                    *value = (min); \
-                } \
-            } else { \
-                if (*value <= (max) / (type)base) { \
-                    *value = (type)base * (*value) + (type)digit; \
-                } else { \
-                    *value = (max); \
-                } \
-            } \
-        } \
-        return index; \
+static int str_to_int(const char *const str, int width, int base, intmax_t *const value)
+{
+    int index = 0;
+    bool negative = false;
+    *value = (intmax_t)0;
+    if ((str[index] == '+') || (str[index] == '-')) {
+        negative = str[index] == '-';
+        index++;
     }
-
-// Some sort of generics in C using the preprocessor
-CREATE_STR_TO_INT_FN(str_to_int, int, 0, INT_MAX, INT_MIN)
-CREATE_STR_TO_INT_FN(str_to_long, long, 0L, LONG_MAX, LONG_MIN)
-CREATE_STR_TO_INT_FN(str_to_llong, long long, 0LL, LLONG_MAX, LLONG_MIN)
-CREATE_STR_TO_INT_FN(str_to_intmax, intmax_t, (intmax_t)0, INTMAX_MAX, INTMAX_MIN)
-CREATE_STR_TO_INT_FN(str_to_uint, unsigned int, (unsigned int)0, UINT_MAX, (unsigned int)0)
-CREATE_STR_TO_INT_FN(str_to_ulong, unsigned long, 0UL, ULONG_MAX, 0UL)
-CREATE_STR_TO_INT_FN(str_to_ullong, unsigned long long, 0ULL, ULLONG_MAX, 0ULL)
-CREATE_STR_TO_INT_FN(str_to_ptr, uintptr_t, (uintptr_t)0, UINTPTR_MAX, (uintptr_t)0)
-CREATE_STR_TO_INT_FN(str_to_uintmax, uintmax_t, (uintmax_t)0, UINTMAX_MAX, (uintmax_t)0)
+    if (str[index] == '0') {
+        if (str[index+1] == 'x') {
+            if ((base == 0) || (base == 16)) {
+                base = 16;
+                index += 2;
+            }
+        } else {
+            if ((base == 0) || (base == 8)) {
+                base = 8;
+                index++;
+            }
+        }
+    }
+    if (base == 0) { // Default base
+        base = 10;
+    }
+    for (; ((width < 0) || (index < width)) && (str[index] != '\0'); index++) {
+        const char c = str[index];
+        int digit = 0;
+        if (isdigit(c)) {
+            digit = c - '0';
+        } else if ((base > 10) && isalpha(c)) {
+            digit = tolower(c) - 'a' + 10;
+        } else {
+            break;
+        }
+        if (digit >= base) {
+            break;
+        }
+        *value = base * (*value) + ((negative) ? -digit : digit);
+    }
+    return index;
+}
 
 // Generic function to convert integer numbers to string
 // Return the amount of characters that would have been written if we had enough size
@@ -367,32 +341,28 @@ static int int_to_str(char **buf, size_t *const sz,
     return written;
 }
 
-// Computes x * base^exponent
-#define CREATE_SCALE_RADIX_EXP_FN(name, type, zero, max) \
-    static type name(type x, const int radix, int exponent) { \
-        if (x == zero) { \
-            return x; \
-        } \
-        if (exponent < 0) { \
-            while (exponent++ != 0) { \
-                x /= (type)radix; \
-            } \
-        } else { \
-            while (exponent-- != 0) { \
-                if (x < -(type)max/(type)radix) { \
-                    return -HUGE_VAL; \
-                } else if ((type)max/(type)radix < x) { \
-                    return HUGE_VAL; \
-                } \
-                x *= (type)radix; \
-            } \
-        } \
-        return x; \
+// Computes x * radix^exponent
+static double scale_radix_exp(double x, const int radix, int exponent)
+{
+    if (x == 0.0) {
+        return x;
     }
-
-CREATE_SCALE_RADIX_EXP_FN(scale_radix_exp_float, float, 0.0f, FLT_MAX)
-CREATE_SCALE_RADIX_EXP_FN(scale_radix_exp_double, double, 0.0, DBL_MAX)
-CREATE_SCALE_RADIX_EXP_FN(scale_radix_exp_ldouble, long double, 0.0L, LDBL_MAX)
+    if (exponent < 0) {
+        while (exponent++ != 0) {
+            x /= radix;
+        }
+    } else {
+        while (exponent-- != 0) {
+            if (x < -DBL_MAX/radix) {
+                return -HUGE_VAL;
+            } else if (DBL_MAX/radix < x) {
+                return HUGE_VAL;
+            }
+            x *= radix;
+        }
+    }
+    return x;
+}
 
 LIBCJ_FN long div_remainder_double(const double dividend, const double divisor)
 {
@@ -410,12 +380,12 @@ LIBCJ_FN long int exponent_form_double(double *const value, const int base)
     }
     if ((int)(*value/base) > 0) {
         while ((int)(*value/base) > 0) {
-            *value = scale_radix_exp_double(*value, base, -1);
+            *value = scale_radix_exp(*value, base, -1);
             exponent++;
         }
     } else {
         while ((int)(*value) == 0) {
-            *value = scale_radix_exp_double(*value, base, 1);
+            *value = scale_radix_exp(*value, base, 1);
             exponent--;
         }
     }
@@ -424,10 +394,10 @@ LIBCJ_FN long int exponent_form_double(double *const value, const int base)
 
 LIBCJ_FN double rouding_double(const double value, const int base, const int decimal_places)
 {
-    const double y = scale_radix_exp_double(value, base, decimal_places);
+    const double y = scale_radix_exp(value, base, decimal_places);
     const double remainder = y - (long)y;
     if (remainder >= 0.5) {
-        const double value_to_add = scale_radix_exp_double(1.0, base, -decimal_places);
+        const double value_to_add = scale_radix_exp(1.0, base, -decimal_places);
         return (value + value_to_add);
     }
     return value;
@@ -487,7 +457,7 @@ static int double_to_str(char **buf, size_t *const sz,
     bool has_decimal_chars = false;
     value = rouding_double(value, base, precision);
     for (int exp = precision; exp > 0; exp--) {
-        const double y = scale_radix_exp_double(value, base, exp);
+        const double y = scale_radix_exp(value, base, exp);
         char c = (char)div_remainder_double(y, base);
         if (right_fill_with_zeros || has_decimal_chars || (c != 0)) {
             str[written++] = VALUE_TO_CHAR(c, uppercase);
@@ -500,7 +470,7 @@ static int double_to_str(char **buf, size_t *const sz,
     char c = (char)div_remainder_double(value, base);
     do {
         str[written++] = VALUE_TO_CHAR(c, uppercase);
-        value = scale_radix_exp_double(value, base, -1);
+        value = scale_radix_exp(value, base, -1);
         c = (char)div_remainder_double(value, base);
     } while (c > 0);
     while (written < zeros) {
@@ -535,63 +505,58 @@ static int double_to_str(char **buf, size_t *const sz,
     return written;
 }
 
-// This macro defines a function that parses a floating point number with base 10
-// It returns the amount of characters consumed
+// Generic function to convert string into double in base 10
+// Returns the amount of characters that were consumed
 // If width is greather than zero, it parses at most width characters
-#define CREATE_STR_TO_FLOAT_FN(name, type, zero, max, fn) \
-    static int name(const char *const str, int width, type *const value) { \
-        const int base = 10; \
-        bool dotted = false; \
-        int exponent = 0; \
-        int index = 0; \
-        bool negative = false; \
-        *value = zero; \
-        if (width >= 0) { \
-            width += index; \
-        } \
-        if ((str[index] == '+') || (str[index] == '-')) { \
-            negative = str[index] == '-'; \
-            index++; \
-        } \
-        for (; ((width < 0) || (index < width)) && (str[index] != '\0'); index++) { \
-            if (isdigit(str[index])) { \
-                const int digit = str[index] - '0'; \
-                if (*value <= max / (type)base) { \
-                    *value = *value * (type)base + (type)digit; \
-                } else { \
-                    exponent++; \
-                } \
-                if (dotted) { \
-                    exponent--; \
-                } \
-            } else if (str[index] == '.') { \
-                if (dotted) { \
-                    break; \
-                } \
-                dotted = true; \
-            } else { \
-                break; \
-            } \
-        } \
-        if (tolower(str[index]) == 'e') { \
-            int exp; \
-            const int parsed = str_to_sign_integer(&str[index+1], (width-index-1), &exp); \
-            if (parsed > 0) { \
-                index += parsed + 1; \
-                if (exponent > 0) { \
-                    exponent = ((INT_MAX - exponent) < exp) ? INT_MAX : (exponent + exp); \
-                } else { \
-                    exponent = (exp < (INT_MIN - exponent)) ? INT_MIN : (exponent + exp); \
-                } \
-            } \
-        } \
-        *value = fn(negative ? -(*value) : *value, base, exponent); \
-        return index; \
+LIBCJ_FN int str_to_double(const char *const str, int width, double *const value) {
+    const int base = 10;
+    bool dotted = false;
+    int exponent = 0;
+    int index = 0;
+    bool negative = false;
+    *value = 0.0;
+    if (width >= 0) {
+        width += index;
     }
-
-CREATE_STR_TO_FLOAT_FN(str_to_float, float, 0.0f, FLT_MAX, scale_radix_exp_float)
-CREATE_STR_TO_FLOAT_FN(str_to_double, double, 0.0, DBL_MAX, scale_radix_exp_double)
-CREATE_STR_TO_FLOAT_FN(str_to_ldouble, long double, 0.0L, LDBL_MAX, scale_radix_exp_ldouble)
+    if ((str[index] == '+') || (str[index] == '-')) {
+        negative = str[index] == '-';
+        index++;
+    }
+    for (; ((width < 0) || (index < width)) && (str[index] != '\0'); index++) {
+        if (isdigit(str[index])) {
+            const int digit = str[index] - '0';
+            if (*value <= DBL_MAX / base) {
+                *value = *value * base + digit;
+            } else {
+                exponent++;
+            }
+            if (dotted) {
+                exponent--;
+            }
+        } else if (str[index] == '.') {
+            if (dotted) {
+                break;
+            }
+            dotted = true;
+        } else {
+            break;
+        }
+    }
+    if (tolower(str[index]) == 'e') {
+        int exp;
+        const int parsed = str_to_sign_integer(&str[index+1], (width-index-1), &exp);
+        if (parsed > 0) {
+            index += parsed + 1;
+            if (exponent > 0) {
+                exponent = ((INT_MAX - exponent) < exp) ? INT_MAX : (exponent + exp);
+            } else {
+                exponent = (exp < (INT_MIN - exponent)) ? INT_MIN : (exponent + exp);
+            }
+        }
+    }
+    *value = scale_radix_exp(negative ? -(*value) : *value, base, exponent);
+    return index;
+}
 
 static int put_string(char **buf, size_t *const sz, const int width, int precision, const bool left_justify, const char *string)
 {
@@ -1372,64 +1337,175 @@ char *strsep(char **str, const char *delimiters)
 //------------------------------------------------------------------------------
 
 // Convert string to integer
-#define CREATE_ATOI_FN(name, type, fn) \
-    type name(const char *str) \
-    { \
-        type value; \
-        SKIP_WHITESPACES(str); \
-        fn(str, -1, 10, &value); \
-        return value; \
-    }
+int atoi(const char *str)
+{
+    return strtoi(str, NULL, 10);
+}
 
-CREATE_ATOI_FN(atoi, int, str_to_int)
-CREATE_ATOI_FN(atol, long, str_to_long)
-CREATE_ATOI_FN(atoll, long long, str_to_llong)
+// Convert string to long integer
+long atol(const char *str)
+{
+    return strtol(str, NULL, 10);
+}
+
+// Convert string to long long integer
+long long atoll(const char *str)
+{
+    return strtoll(str, NULL, 10);
+}
 
 // Convert string to integer
-#define CREATE_STRTOI_FN(name, type, fn) \
+#define CREATE_STRTOI_FN(name, type, zero, max, min) \
     type name(const char *str, char **endptr, int base) \
     { \
-        type value; \
+        bool negative = false; \
+        type value = zero; \
+        if ((base < 0) || (base > 36)) { \
+            return zero; \
+        } \
         SKIP_WHITESPACES(str); \
-        const int parsed = fn(str, -1, base, &value); \
+        if ((*str == '+') || (*str == '-')) { \
+            negative = *str == '-'; \
+            str++; \
+        } \
+        if (*str == '0') { \
+            if (*(str+1) == 'x') { \
+                if ((base == 0) || (base == 16)) { \
+                    base = 16; \
+                    str += 2; \
+                } \
+            } else { \
+                if ((base == 0) || (base == 8)) { \
+                    base = 8; \
+                    str++; \
+                } \
+            } \
+        } \
+        if (base == 0) { \
+            base = 10; \
+        } \
+        for (; *str != '\0'; str++) { \
+            int digit = 0; \
+            if (isdigit(*str)) { \
+                digit = *str - '0'; \
+            } else if ((base > 10) && isalpha(*str)) { \
+                digit = tolower(*str) - 'a' + 10; \
+            } else { \
+                break; \
+            } \
+            if (digit >= base) { \
+                break; \
+            } \
+            if (negative) { \
+                if (value >= (min) / (type)base) { \
+                    value = (type)base * (value) - (type)digit; \
+                } else { \
+                    value = (min); \
+                } \
+            } else { \
+                if (value <= (max) / (type)base) { \
+                    value = (type)base * (value) + (type)digit; \
+                } else { \
+                    value = (max); \
+                } \
+            } \
+        } \
         if (endptr != NULL) { \
-            *endptr = (char *)str + parsed; \
+            *endptr = (char *)str; \
         } \
         return value; \
     }
 
-CREATE_STRTOI_FN(strtoi, int, str_to_int)
-CREATE_STRTOI_FN(strtol, long, str_to_long)
-CREATE_STRTOI_FN(strtoll, long long, str_to_llong)
-CREATE_STRTOI_FN(strtou, unsigned int, str_to_uint)
-CREATE_STRTOI_FN(strtoul, unsigned long, str_to_ulong)
-CREATE_STRTOI_FN(strtoull, unsigned long long, str_to_ullong)
+// Some sort of generics in C using the preprocessor
+CREATE_STRTOI_FN(strtoi, int, 0, INT_MAX, INT_MIN)
+CREATE_STRTOI_FN(strtol, long, 0L, LONG_MAX, LONG_MIN)
+CREATE_STRTOI_FN(strtoll, long long, 0LL, LLONG_MAX, LLONG_MIN)
+CREATE_STRTOI_FN(strtou, unsigned int, 0U, UINT_MAX, 0U)
+CREATE_STRTOI_FN(strtoul, unsigned long, 0UL, ULONG_MAX, 0UL)
+CREATE_STRTOI_FN(strtoull, unsigned long long, 0ULL, ULLONG_MAX, 0ULL)
 
 // Convert string to double
 double atof(const char *str)
 {
-    double value;
-    SKIP_WHITESPACES(str);
-    str_to_double(str, -1, &value);
-    return value;
+    return strtod(str, NULL);
 }
 
 // Convert string to floating point number
-#define CREATE_STRTOF_FN(name, type, fn) \
+#define CREATE_STRTOF_FN(name, type, zero, max) \
     type name(const char *str, char **endptr) \
     { \
-        type value; \
+        const int base = 10; \
+        bool dotted = false; \
+        int exponent = 0; \
+        bool negative = false; \
+        type value = zero; \
         SKIP_WHITESPACES(str); \
-        const int parsed = fn(str, -1, &value); \
+        if ((*str == '+') || (*str == '-')) { \
+            negative = *str == '-'; \
+            str++; \
+        } \
+        for (; *str != '\0'; str++) { \
+            if (isdigit(*str)) { \
+                const int digit = *str - '0'; \
+                if (value <= max / (type)base) { \
+                    value = value * (type)base + (type)digit; \
+                } else { \
+                    exponent++; \
+                } \
+                if (dotted) { \
+                    exponent--; \
+                } \
+            } else if (*str == '.') { \
+                if (dotted) { \
+                    break; \
+                } \
+                dotted = true; \
+            } else { \
+                break; \
+            } \
+        } \
+        if (tolower(*str) == 'e') { \
+            char *endint = NULL; \
+            const int exp = strtoi((str+1), &endint, 10); \
+            if ((endint != NULL) && ((endint-str) > 1)) { \
+                str = endint; \
+                if (exponent > 0) { \
+                    exponent = ((INT_MAX - exponent) < exp) ? INT_MAX : (exponent + exp); \
+                } else { \
+                    exponent = (exp < (INT_MIN - exponent)) ? INT_MIN : (exponent + exp); \
+                } \
+            } \
+        } \
         if (endptr != NULL) { \
-            *endptr = (char *)str + parsed; \
+            *endptr = (char *)str; \
+        } \
+        if (value == zero) { \
+            return value; \
+        } \
+        if (negative) { \
+            value = -value; \
+        } \
+        if (exponent < 0) { \
+            while (exponent++ != 0) { \
+                value /= (type)base; \
+            } \
+        } else { \
+            while (exponent-- != 0) { \
+                if (value < -(type)max/(type)base) { \
+                    return -HUGE_VAL; \
+                } else if ((type)max/(type)base < value) { \
+                    return HUGE_VAL; \
+                } \
+                value *= (type)base; \
+            } \
         } \
         return value; \
     }
 
-CREATE_STRTOF_FN(strtof, float, str_to_float)
-CREATE_STRTOF_FN(strtod, double, str_to_double)
-CREATE_STRTOF_FN(strtold, long double, str_to_ldouble)
+// Some sort of generics in C using the preprocessor
+CREATE_STRTOF_FN(strtof, float, 0.0f, FLT_MAX)
+CREATE_STRTOF_FN(strtod, double, 0.0, DBL_MAX)
+CREATE_STRTOF_FN(strtold, long double, 0.0L, LDBL_MAX)
 
 //------------------------------------------------------------------------------
 // STDIO.H
@@ -1479,34 +1555,34 @@ int sscanf(const char *buf, const char *fmt, ...)
 
 // Helper macros used to simplify code in vsscanf
 // Overflow in this situation is undefined behavior according to C-standard
-#define SCANF_HANDLE_NUMBER(type, str_to_type_fn, save_arg_fn)              \
-    do {                                                                    \
-        type value;                                                         \
-        SKIP_WHITESPACES(buf_cursor);                                       \
-        const int parsed_chars = str_to_type_fn(buf_cursor, width, &value); \
-        if (parsed_chars == 0) {                                            \
-            goto vsscanf_error;                                             \
-        }                                                                   \
-        if (!assignment_suppression) {                                      \
-            save_arg_fn(args, modifier, value);                             \
-            count++;                                                        \
-        }                                                                   \
-        buf_cursor += parsed_chars;                                         \
+#define SCANF_HANDLE_FLOAT(type, save_arg_fn)                              \
+    do {                                                                   \
+        type value;                                                        \
+        SKIP_WHITESPACES(buf_cursor);                                      \
+        const int parsed_chars = str_to_double(buf_cursor, width, &value); \
+        if (parsed_chars == 0) {                                           \
+            goto vsscanf_error;                                            \
+        }                                                                  \
+        if (!assignment_suppression) {                                     \
+            save_arg_fn(args, modifier, value);                            \
+            count++;                                                       \
+        }                                                                  \
+        buf_cursor += parsed_chars;                                        \
     } while (0)
 
-#define SCANF_HANDLE_NUMBER_BASE(type, str_to_type_fn, save_arg_fn, base)         \
-    do {                                                                          \
-        type value;                                                               \
-        SKIP_WHITESPACES(buf_cursor);                                             \
-        const int parsed_chars = str_to_type_fn(buf_cursor, width, base, &value); \
-        if (parsed_chars == 0) {                                                  \
-            goto vsscanf_error;                                                   \
-        }                                                                         \
-        if (!assignment_suppression) {                                            \
-            save_arg_fn(args, modifier, value);                                   \
-            count++;                                                              \
-        }                                                                         \
-        buf_cursor += parsed_chars;                                               \
+#define SCANF_HANDLE_INT(type, save_arg_fn, base)                             \
+    do {                                                                      \
+        intmax_t value;                                                       \
+        SKIP_WHITESPACES(buf_cursor);                                         \
+        const int parsed_chars = str_to_int(buf_cursor, width, base, &value); \
+        if (parsed_chars == 0) {                                              \
+            goto vsscanf_error;                                               \
+        }                                                                     \
+        if (!assignment_suppression) {                                        \
+            save_arg_fn(args, modifier, (type)value);                         \
+            count++;                                                          \
+        }                                                                     \
+        buf_cursor += parsed_chars;                                           \
     } while (0)
 
 // Read formatted data from string into variable argument list
@@ -1536,28 +1612,28 @@ int vsscanf(const char *buf, const char *fmt, va_list args)
             cursor += parse_fmt_specifier(cursor, &specifier, &modifier, NULL);
             switch (specifier) {
             case Fmt_d: // Signed integer in decimal base
-                SCANF_HANDLE_NUMBER_BASE(intmax_t, str_to_intmax, save_int_arg, 10);
+                SCANF_HANDLE_INT(intmax_t, save_int_arg, 10);
                 break;
             case Fmt_i: // Signed integer in decimal, hexadecimal or octal base
-                SCANF_HANDLE_NUMBER_BASE(intmax_t, str_to_intmax, save_int_arg, 0);
+                SCANF_HANDLE_INT(intmax_t, save_int_arg, 0);
                 break;
             case Fmt_u: // Unsigned integer
-                SCANF_HANDLE_NUMBER_BASE(uintmax_t, str_to_uintmax, save_uint_arg, 10);
+                SCANF_HANDLE_INT(uintmax_t, save_uint_arg, 10);
                 break;
             case Fmt_o: // Unsigned integer in octal form
-                SCANF_HANDLE_NUMBER_BASE(uintmax_t, str_to_uintmax, save_uint_arg, 8);
+                SCANF_HANDLE_INT(uintmax_t, save_uint_arg, 8);
                 break;
             case Fmt_x: // Unsigned integer in hexadecimal form
-                SCANF_HANDLE_NUMBER_BASE(uintmax_t, str_to_uintmax, save_uint_arg, 16);
+                SCANF_HANDLE_INT(uintmax_t, save_uint_arg, 16);
                 break;
             case Fmt_p: // Pointer
-                SCANF_HANDLE_NUMBER_BASE(uintptr_t, str_to_ptr, save_ptr_arg, 16);
+                SCANF_HANDLE_INT(uintptr_t, save_ptr_arg, 16);
                 break;
             case Fmt_f: // Floating point
             case Fmt_e:
             case Fmt_g:
             case Fmt_a:
-                SCANF_HANDLE_NUMBER(double, str_to_double, save_float_arg);
+                SCANF_HANDLE_FLOAT(double, save_float_arg);
                 break;
             case Fmt_c: { // Character
                 char *str = NULL;

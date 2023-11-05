@@ -978,6 +978,8 @@ static void check_strtof(void)
     EXPECT_FLOAT_PREC(strtof("1e-3", NULL), 1e-3f, precision);
     EXPECT_FLOAT(strtof("123e", &endptr), 123.0f);
     EXPECT_CHAR(*endptr, 'e');
+    EXPECT_FLOAT(strtof("1.2e-3alpha", &endptr), 1.2e-3f);
+    EXPECT_CHAR(*endptr, 'a');
 }
 
 static void check_strtod(void)
@@ -1009,6 +1011,8 @@ static void check_strtod(void)
     EXPECT_DOUBLE(strtod("1e-3", NULL), 1e-3);
     EXPECT_DOUBLE(strtod("123e", &endptr), 123.0);
     EXPECT_CHAR(*endptr, 'e');
+    EXPECT_DOUBLE(strtod("1.5e-3alpha", &endptr), 1.5e-3);
+    EXPECT_CHAR(*endptr, 'a');
 }
 
 static void check_strtold(void)
@@ -1041,6 +1045,8 @@ static void check_strtold(void)
     EXPECT_LDOUBLE(strtold("1e-3", NULL), 1e-3L);
     EXPECT_LDOUBLE(strtold("123e", &endptr), 123L);
     EXPECT_CHAR(*endptr, 'e');
+    EXPECT_LDOUBLE(strtold("1.5e-1alpha", &endptr), 1.5e-1L);
+    EXPECT_CHAR(*endptr, 'a');
 }
 
 static void check_stdlib(void)
