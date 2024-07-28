@@ -95,13 +95,13 @@
 
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
-#define ABS(x)    (((x) >= 0) ? (x) : -(x))
+#define ABS(x)    (((x) >= 0)  ? (x) : -(x))
 
 //------------------------------------------------------------------------------
 // CUSTOM TYPES
 //------------------------------------------------------------------------------
 
-// The length modifiers j, z and t are not implemented
+// TODO: The length modifiers j, z and t are not implemented
 enum Length_Modifier {
     Modifier_None,
     Modifier_char, Modifier_short, Modifier_long, Modifier_llong,
@@ -290,17 +290,19 @@ static int int_to_str(char **buf, size_t *const sz,
     const bool sign, const intmax_t value)
 {
     char str[LOCAL_BUFFER_SIZE]; 
-    const bool left_justify = flags & Flag_Minus;
+    const bool left_justify = (flags & Flag_Minus) != 0;
     const bool negative = sign && (value < 0);
     const bool uppercase = (flags & Flag_Upper) != 0;
     // Pointers are the only unsigned integer that can have the plus flag
     const bool include_sign = negative || ((flags & Flag_Plus) != 0);
-    const int base_padding = ((flags & Flag_Hash) && (base != 10) && (value != 0)) ? (base / 8) : 0;
-    // Padding using for sign and base specifiers
-    const int left_padding = (int)(include_sign ? (base_padding+1) : base_padding);
-    const bool use_precision = (precision >= 0) || (flags & Flag_Minus);
+    const bool show_base_padding = ((flags & Flag_Hash) != 0) && (base != 10) && (value != 0);
+    const int base_padding = show_base_padding ? (base / 8) : 0;
+    // Padding used for sign and base specifiers
+    const int left_padding = base_padding + (include_sign ? 1 : 0);
+    const bool use_precision = (precision >= 0) || ((flags & Flag_Minus) != 0);
     // Flag_Zero is ignored if precision or Flag_Minus are informed
-    const int zeros = use_precision ? precision : ((flags & Flag_Zero) ? (width-left_padding) : 0);
+    const int left_pad_zeros = (flags & Flag_Zero) ? (width-left_padding) : 0;
+    const int zeros = use_precision ? precision : left_pad_zeros;
     uintmax_t x = (uintmax_t)(negative ? (-value) : value);
     int written = 0;
     do {
@@ -326,15 +328,19 @@ static int int_to_str(char **buf, size_t *const sz,
     if (include_sign) {
         str[written++] = negative ? '-' : '+';
     }
-    while (!left_justify && written < width) {
-        str[written++] = ' ';
+    if (!left_justify) {
+        while (written < width) {
+            str[written++] = ' ';
+        }
     }
     for (int index = written; index > 0; index--) {
         PUTCHAR(str[index-1]);
     }
-    while (left_justify && written < width) {
-        PUTCHAR(' ');
-        written++;
+    if (left_justify) {
+        while (written < width) {
+            PUTCHAR(' ');
+            written++;
+        }
     }
     // This function doesn't need to introduce null termination to the buffer
     // This is responsability of its caller
@@ -416,9 +422,10 @@ static int double_to_str(char **buf, size_t *const sz,
     const bool include_sign = negative || ((flags & Flag_Plus) != 0);
     const bool right_fill_with_zeros = ((base != 16) || precision > 0) && ((flags & Flag_Short) == 0);
     const int base_padding = (base == 16) ? 2 : 0;
-    const int left_padding = (int)(include_sign ? (base_padding+1) : base_padding);
+    const int left_padding = base_padding + (include_sign ? 1 : 0);
     // Flag_Zero is ignored if Flag_Minus is informed
-    const int zeros = (!(flags & Flag_Minus) && (flags & Flag_Zero)) ? (width-left_padding) : 0;
+    const bool pad_with_zeros = !(flags & Flag_Minus) && (flags & Flag_Zero);
+    const int zeros = pad_with_zeros ? (width-left_padding) : 0;
     value = negative ? (-value) : value;
     int written = 0;
     long int exponent = 0;
@@ -689,121 +696,71 @@ LIBCJ_FN int parse_fmt_specifier(const char *const fmt, enum Fmt_Specifier *cons
     return (index + 1);
 }
 
-LIBCJ_FN void save_int_arg(va_list args, enum Length_Modifier modifier, intmax_t value)
-{
-    void *ptr = va_arg(args, void *);
-    switch (modifier) {
-    case Modifier_char:
-        *(char *)ptr = (char)value;
-        break;
-    case Modifier_short:
-        *(short *)ptr = (short)value;
-        break;
-    case Modifier_long:
-        *(long *)ptr = (long)value;
-        break;
-    case Modifier_llong:
-        *(long long *)ptr = (long long)value;
-        break;
-    case Modifier_None:
-    case Modifier_ldouble:
-    default:
-        *(int *)ptr = (int)value;
-        break;
-    }
-}
+// Helper macros used to simplify code in __vsnprintf
+#define PRINTF_HANDLE_INT(base)                                                                            \
+    do {                                                                                                   \
+        switch (modifier) {                                                                                \
+        case Modifier_char:                                                                                \
+            written += int_to_str(buf, sz, width, precision, flags, base, true, (char)va_arg(args, int));  \
+            break;                                                                                         \
+        case Modifier_short:                                                                               \
+            written += int_to_str(buf, sz, width, precision, flags, base, true, (short)va_arg(args, int)); \
+            break;                                                                                         \
+        case Modifier_long:                                                                                \
+            written += int_to_str(buf, sz, width, precision, flags, base, true, va_arg(args, long));       \
+            break;                                                                                         \
+        case Modifier_llong:                                                                               \
+            written += int_to_str(buf, sz, width, precision, flags, base, true, va_arg(args, long long));  \
+            break;                                                                                         \
+        case Modifier_None:                                                                                \
+        case Modifier_ldouble:                                                                             \
+        default:                                                                                           \
+            written += int_to_str(buf, sz, width, precision, flags, base, true, va_arg(args, int));        \
+            break;                                                                                         \
+        }                                                                                                  \
+    } while (0)
 
-LIBCJ_FN void save_uint_arg(va_list args, enum Length_Modifier modifier, uintmax_t value)
-{
-    void *ptr = va_arg(args, void *);
-    switch (modifier) {
-    case Modifier_char:
-        *(unsigned char *)ptr = (unsigned char)value;
-        break;
-    case Modifier_short:
-        *(unsigned short *)ptr = (unsigned short)value;
-        break;
-    case Modifier_long:
-        *(unsigned long *)ptr = (unsigned long)value;
-        break;
-    case Modifier_llong:
-        *(unsigned long long *)ptr = (unsigned long long)value;
-        break;
-    case Modifier_None:
-    case Modifier_ldouble:
-    default:
-        *(unsigned int *)ptr = (unsigned int)value;
-        break;
-    }
-}
+#define PRINTF_HANDLE_UINT(base)                                                                                              \
+    do {                                                                                                                      \
+        flags = flags & (enum Fmt_Flags)~Flag_Plus; /* This flag isn't supported for unsigned numbers */                      \
+        switch (modifier) {                                                                                                   \
+        case Modifier_char:                                                                                                   \
+            written += int_to_str(buf, sz, width, precision, flags, base, false, (unsigned char)va_arg(args, unsigned int));  \
+            break;                                                                                                            \
+        case Modifier_short:                                                                                                  \
+            written += int_to_str(buf, sz, width, precision, flags, base, false, (unsigned short)va_arg(args, unsigned int)); \
+            break;                                                                                                            \
+        case Modifier_long:                                                                                                   \
+            written += int_to_str(buf, sz, width, precision, flags, base, false, (intmax_t)va_arg(args, unsigned long));      \
+            break;                                                                                                            \
+        case Modifier_llong:                                                                                                  \
+            written += int_to_str(buf, sz, width, precision, flags, base, false, (intmax_t)va_arg(args, unsigned long long)); \
+            break;                                                                                                            \
+        case Modifier_None:                                                                                                   \
+        case Modifier_ldouble:                                                                                                \
+        default:                                                                                                              \
+            written += int_to_str(buf, sz, width, precision, flags, base, false, va_arg(args, unsigned int));                 \
+            break;                                                                                                            \
+        }                                                                                                                     \
+    } while (0)
 
-LIBCJ_FN void save_ptr_arg(va_list args, enum Length_Modifier modifier, uintptr_t value)
-{
-    (void)modifier;
-    void **ptr = va_arg(args, void *);
-    *ptr = (void *)value;
-}
-
-LIBCJ_FN void save_float_arg(va_list args, enum Length_Modifier modifier, double value)
-{
-    // Obs: long double is not currently supported
-    void *ptr = va_arg(args, void *);
-    switch (modifier) {
-    case Modifier_long:
-        *(double *)ptr = (double)value;
-        break;
-    case Modifier_ldouble:
-        *(long double *)ptr = (long double)value;
-        break;
-    case Modifier_char:
-    case Modifier_short:
-    case Modifier_llong:
-    case Modifier_None:
-    default:
-        *(float *)ptr = (float)value;
-        break;
-    }
-}
-
-LIBCJ_FN intmax_t next_int_arg(va_list args, enum Length_Modifier modifier)
-{
-    switch (modifier) {
-    case Modifier_char:  return (char)va_arg(args, int);
-    case Modifier_short: return (short)va_arg(args, int);
-    case Modifier_long:  return va_arg(args, long);
-    case Modifier_llong: return va_arg(args, long long);
-    case Modifier_None:
-    case Modifier_ldouble:
-    default: return va_arg(args, int);
-    }
-}
-
-LIBCJ_FN intmax_t next_uint_arg(va_list args, enum Length_Modifier modifier)
-{
-    switch (modifier) {
-    case Modifier_char:  return (unsigned char)va_arg(args, unsigned int);
-    case Modifier_short: return (unsigned short)va_arg(args, unsigned int);
-    case Modifier_long:  return (intmax_t)va_arg(args, unsigned long);
-    case Modifier_llong: return (intmax_t)va_arg(args, unsigned long long);
-    case Modifier_None:
-    case Modifier_ldouble:
-    default: return va_arg(args, unsigned int);
-    }
-}
-
-LIBCJ_FN double next_float_arg(va_list args, enum Length_Modifier modifier)
-{
-    // Obs: long double is not currently supported
-    switch (modifier) {
-    case Modifier_ldouble: return (double)va_arg(args, long double);
-    case Modifier_None:
-    case Modifier_char:
-    case Modifier_short:
-    case Modifier_long:
-    case Modifier_llong:
-    default: return va_arg(args, double);
-    }
-}
+// TODO: long double is not currently supported
+#define PRINTF_HANDLE_FLOAT(base, special_flag)                                                                                   \
+    do {                                                                                                                          \
+        switch (modifier) {                                                                                                       \
+        case Modifier_ldouble:                                                                                                    \
+            written += double_to_str(buf, sz, width, precision, (flags | special_flag), base, (double)va_arg(args, long double)); \
+            break;                                                                                                                \
+        case Modifier_None:                                                                                                       \
+        case Modifier_char:                                                                                                       \
+        case Modifier_short:                                                                                                      \
+        case Modifier_long:                                                                                                       \
+        case Modifier_llong:                                                                                                      \
+        default:                                                                                                                  \
+            written += double_to_str(buf, sz, width, precision, (flags | special_flag), base, va_arg(args, double));              \
+            break;                                                                                                                \
+        }                                                                                                                         \
+    } while (0)
 
 static int __vsnprintf(char **buf, size_t *const sz, const char *fmt, va_list args)
 {
@@ -840,31 +797,28 @@ static int __vsnprintf(char **buf, size_t *const sz, const char *fmt, va_list ar
         switch (specifier) {
         case Fmt_d:
         case Fmt_i: // Signed integer
-            written += int_to_str(buf, sz, width, precision, flags, 10, true, next_int_arg(args, modifier));
+            PRINTF_HANDLE_INT(10);
             break;
         case Fmt_u: // Unsigned integer
-            flags = flags & (enum Fmt_Flags)~Flag_Plus; // This flag isn't supported for unsigned numbers
-            written += int_to_str(buf, sz, width, precision, flags, 10, false, next_uint_arg(args, modifier));
+            PRINTF_HANDLE_UINT(10);
             break;
         case Fmt_o: // Unsigned integer in octal form
-            flags = flags & (enum Fmt_Flags)~Flag_Plus; // This flag isn't supported for octal numbers
-            written += int_to_str(buf, sz, width, precision, flags, 8, false, next_uint_arg(args, modifier));
+            PRINTF_HANDLE_UINT(8);
             break;
         case Fmt_x: // Unsigned integer in hexadecimal form
-            flags = flags & (enum Fmt_Flags)~Flag_Plus; // This flag isn't supported for hexadecimal numbers
-            written += int_to_str(buf, sz, width, precision, flags, 16, false, next_uint_arg(args, modifier));
+            PRINTF_HANDLE_UINT(16);
             break;
         case Fmt_f: // Decimal floating point
-            written += double_to_str(buf, sz, width, precision, flags, 10, next_float_arg(args, modifier));
+            PRINTF_HANDLE_FLOAT(10, 0);
             break;
         case Fmt_e: // Decimal floating point in exponent form
-            written += double_to_str(buf, sz, width, precision, (flags | Flag_Exp), 10, next_float_arg(args, modifier));
+            PRINTF_HANDLE_FLOAT(10, Flag_Exp);
             break;
         case Fmt_g: // Decimal floating point in shortest form
-            written += double_to_str(buf, sz, width, precision, (flags | Flag_Short), 10, next_float_arg(args, modifier));
+            PRINTF_HANDLE_FLOAT(10, Flag_Short);
             break;
         case Fmt_a: // Decimal floating point in hexadecimal form
-            written += double_to_str(buf, sz, width, precision, (flags | Flag_Exp), 16, next_float_arg(args, modifier));
+            PRINTF_HANDLE_FLOAT(16, Flag_Exp);
             break;
         case Fmt_c: // Character
             PUTCHAR((char)va_arg(args, int));
@@ -882,7 +836,7 @@ static int __vsnprintf(char **buf, size_t *const sz, const char *fmt, va_list ar
             }
         } break;
         case Fmt_n: { // Return the number of characters written so far
-            // Length modifiers are not implemented for %n
+            // TODO: Length modifiers are not implemented for %n
             int *ptr = va_arg(args, int *);
             *ptr = written;
         } break;
@@ -905,7 +859,7 @@ static int __vsnprintf(char **buf, size_t *const sz, const char *fmt, va_list ar
 }
 
 // Temporary buffer print function
-char *tprint(char *fmt, ...) {
+char *tprintf(char *fmt, ...) {
     static THREAD_LOCAL char buffer[4096];
     va_list args;
     va_start(args, fmt);
@@ -1015,7 +969,6 @@ int toupper(int c)
     }
     return c;
 }
-
 
 //------------------------------------------------------------------------------
 // STRING.H
@@ -1555,22 +1508,7 @@ int sscanf(const char *buf, const char *fmt, ...)
 
 // Helper macros used to simplify code in vsscanf
 // Overflow in this situation is undefined behavior according to C-standard
-#define SCANF_HANDLE_FLOAT(type, save_arg_fn)                              \
-    do {                                                                   \
-        type value;                                                        \
-        SKIP_WHITESPACES(buf_cursor);                                      \
-        const int parsed_chars = str_to_double(buf_cursor, width, &value); \
-        if (parsed_chars == 0) {                                           \
-            goto vsscanf_error;                                            \
-        }                                                                  \
-        if (!assignment_suppression) {                                     \
-            save_arg_fn(args, modifier, value);                            \
-            count++;                                                       \
-        }                                                                  \
-        buf_cursor += parsed_chars;                                        \
-    } while (0)
-
-#define SCANF_HANDLE_INT(type, save_arg_fn, base)                             \
+#define SCANF_HANDLE_INT(base)                                                \
     do {                                                                      \
         intmax_t value;                                                       \
         SKIP_WHITESPACES(buf_cursor);                                         \
@@ -1579,10 +1517,110 @@ int sscanf(const char *buf, const char *fmt, ...)
             goto vsscanf_error;                                               \
         }                                                                     \
         if (!assignment_suppression) {                                        \
-            save_arg_fn(args, modifier, (type)value);                         \
+            void *ptr = va_arg(args, void *);                                 \
+            switch (modifier) {                                               \
+            case Modifier_char:                                               \
+                *(char *)ptr = (char)value;                                   \
+                break;                                                        \
+            case Modifier_short:                                              \
+                *(short *)ptr = (short)value;                                 \
+                break;                                                        \
+            case Modifier_long:                                               \
+                *(long *)ptr = (long)value;                                   \
+                break;                                                        \
+            case Modifier_llong:                                              \
+                *(long long *)ptr = (long long)value;                         \
+                break;                                                        \
+            case Modifier_None:                                               \
+            case Modifier_ldouble:                                            \
+            default:                                                          \
+                *(int *)ptr = (int)value;                                     \
+                break;                                                        \
+            }                                                                 \
             count++;                                                          \
         }                                                                     \
         buf_cursor += parsed_chars;                                           \
+    } while (0)
+
+#define SCANF_HANDLE_UINT(base)                                               \
+    do {                                                                      \
+        intmax_t value;                                                       \
+        SKIP_WHITESPACES(buf_cursor);                                         \
+        const int parsed_chars = str_to_int(buf_cursor, width, base, &value); \
+        if (parsed_chars == 0) {                                              \
+            goto vsscanf_error;                                               \
+        }                                                                     \
+        if (!assignment_suppression) {                                        \
+            void *ptr = va_arg(args, void *);                                 \
+            switch (modifier) {                                               \
+            case Modifier_char:                                               \
+                *(unsigned char *)ptr = (unsigned char)value;                 \
+                break;                                                        \
+            case Modifier_short:                                              \
+                *(unsigned short *)ptr = (unsigned short)value;               \
+                break;                                                        \
+            case Modifier_long:                                               \
+                *(unsigned long *)ptr = (unsigned long)value;                 \
+                break;                                                        \
+            case Modifier_llong:                                              \
+                *(unsigned long long *)ptr = (unsigned long long)value;       \
+                break;                                                        \
+            case Modifier_None:                                               \
+            case Modifier_ldouble:                                            \
+            default:                                                          \
+                *(unsigned int *)ptr = (unsigned int)value;                   \
+                break;                                                        \
+            }                                                                 \
+            count++;                                                          \
+        }                                                                     \
+        buf_cursor += parsed_chars;                                           \
+    } while (0)
+
+#define SCANF_HANDLE_PTR(base)                                                \
+    do {                                                                      \
+        intmax_t value;                                                       \
+        SKIP_WHITESPACES(buf_cursor);                                         \
+        const int parsed_chars = str_to_int(buf_cursor, width, base, &value); \
+        if (parsed_chars == 0) {                                              \
+            goto vsscanf_error;                                               \
+        }                                                                     \
+        if (!assignment_suppression) {                                        \
+            void **ptr = va_arg(args, void *);                                \
+            *ptr = (void *)value;                                             \
+            count++;                                                          \
+        }                                                                     \
+        buf_cursor += parsed_chars;                                           \
+    } while (0)
+
+// TODO: long double is not currently supported
+#define SCANF_HANDLE_FLOAT()                                               \
+    do {                                                                   \
+        double value;                                                      \
+        SKIP_WHITESPACES(buf_cursor);                                      \
+        const int parsed_chars = str_to_double(buf_cursor, width, &value); \
+        if (parsed_chars == 0) {                                           \
+            goto vsscanf_error;                                            \
+        }                                                                  \
+        if (!assignment_suppression) {                                     \
+            void *ptr = va_arg(args, void *);                              \
+            switch (modifier) {                                            \
+            case Modifier_long:                                            \
+                *(double *)ptr = (double)value;                            \
+                break;                                                     \
+            case Modifier_ldouble:                                         \
+                *(long double *)ptr = (long double)value;                  \
+                break;                                                     \
+            case Modifier_char:                                            \
+            case Modifier_short:                                           \
+            case Modifier_llong:                                           \
+            case Modifier_None:                                            \
+            default:                                                       \
+                *(float *)ptr = (float)value;                              \
+                break;                                                     \
+            }                                                              \
+            count++;                                                       \
+        }                                                                  \
+        buf_cursor += parsed_chars;                                        \
     } while (0)
 
 // Read formatted data from string into variable argument list
@@ -1612,28 +1650,28 @@ int vsscanf(const char *buf, const char *fmt, va_list args)
             cursor += parse_fmt_specifier(cursor, &specifier, &modifier, NULL);
             switch (specifier) {
             case Fmt_d: // Signed integer in decimal base
-                SCANF_HANDLE_INT(intmax_t, save_int_arg, 10);
+                SCANF_HANDLE_INT(10);
                 break;
             case Fmt_i: // Signed integer in decimal, hexadecimal or octal base
-                SCANF_HANDLE_INT(intmax_t, save_int_arg, 0);
+                SCANF_HANDLE_INT(0);
                 break;
             case Fmt_u: // Unsigned integer
-                SCANF_HANDLE_INT(uintmax_t, save_uint_arg, 10);
+                SCANF_HANDLE_UINT(10);
                 break;
             case Fmt_o: // Unsigned integer in octal form
-                SCANF_HANDLE_INT(uintmax_t, save_uint_arg, 8);
+                SCANF_HANDLE_UINT(8);
                 break;
             case Fmt_x: // Unsigned integer in hexadecimal form
-                SCANF_HANDLE_INT(uintmax_t, save_uint_arg, 16);
+                SCANF_HANDLE_UINT(16);
                 break;
             case Fmt_p: // Pointer
-                SCANF_HANDLE_INT(uintptr_t, save_ptr_arg, 16);
+                SCANF_HANDLE_PTR(16);
                 break;
             case Fmt_f: // Floating point
             case Fmt_e:
             case Fmt_g:
             case Fmt_a:
-                SCANF_HANDLE_FLOAT(double, save_float_arg);
+                SCANF_HANDLE_FLOAT();
                 break;
             case Fmt_c: { // Character
                 char *str = NULL;
@@ -1683,7 +1721,7 @@ int vsscanf(const char *buf, const char *fmt, va_list args)
                 }
             } break;
             case Fmt_n: { // Return the number of characters consumed so far
-                // Assignment suppression and length modifiers are not implemented for %n
+                // TODO: Assignment suppression and length modifiers are not implemented for %n
                 int *consumed = va_arg(args, int *);
                 *consumed = (int)(buf_cursor-buf);
             } break;

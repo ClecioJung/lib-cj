@@ -99,7 +99,7 @@ int sscanf(const char *buf, const char *fmt, ...)
 int vsscanf(const char *buf, const char *fmt, va_list args);
 
 // Temporary buffer print function
-char *tprint(char *fmt, ...)
+char *tprintf(char *fmt, ...)
     __attribute__((format(printf, 1, 2)));
 
 #endif  // __LIB_CJ
